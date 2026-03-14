@@ -93,6 +93,49 @@ export function indexOfWaypoint(board: number[], k: number): number {
 }
 
 /**
+ * Validate a path that only fills the board (no waypoint order check).
+ * Path must visit every non-blocked cell exactly once and move only to adjacent cells.
+ */
+export function validatePathOnly(
+  size: GridSize,
+  board: number[],
+  path: number[],
+): { ok: boolean; error?: string } {
+  const total = size * size;
+  const requiredLen = pathCellCount(size, board);
+  if (path.length !== requiredLen) {
+    return {
+      ok: false,
+      error: `Path must visit all ${requiredLen} path cells`,
+    };
+  }
+  const visited = new Set<number>();
+  for (let i = 0; i < path.length; i++) {
+    const idx = path[i];
+    if (idx < 0 || idx >= total) {
+      return { ok: false, error: "Path out of bounds" };
+    }
+    if (board[idx] === BLOCKED) {
+      return { ok: false, error: "Path cannot go through blocked cell" };
+    }
+    if (visited.has(idx)) {
+      return { ok: false, error: "Path must not repeat cells" };
+    }
+    visited.add(idx);
+    if (i > 0) {
+      const prev = path[i - 1];
+      const [pr, pc] = [Math.floor(prev / size), prev % size];
+      const [r, c] = [Math.floor(idx / size), idx % size];
+      const adj = neighbours(size, pr, pc);
+      if (!adj.some(([nr, nc]) => nr === r && nc === c)) {
+        return { ok: false, error: "Path must move to adjacent cell only" };
+      }
+    }
+  }
+  return { ok: true };
+}
+
+/**
  * Validate solution: path visits every non-blocked cell once, in order;
  * when we step on a waypoint it must be the next expected (1, then 2, … then K).
  */

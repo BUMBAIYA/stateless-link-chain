@@ -21,7 +21,7 @@ interface ZipGameCanvasProps {
   gridSize: GridSize;
   board: number[];
   waypointCount: number;
-  onSolve: (timeMs: number, moves: number) => void;
+  onSolve: (timeMs: number, moves: number, path: number[]) => void;
 }
 
 function cellSizeFor(size: GridSize): number {
@@ -36,10 +36,12 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
 
   const [path, setPath] = createSignal<number[]>([]);
   const [startTime] = createSignal(Date.now());
+  const [elapsedMs, setElapsedMs] = createSignal(0);
   const [moves, setMoves] = createSignal(0);
   const [solved, setSolved] = createSignal(false);
 
   let canvasEl: HTMLCanvasElement | null = null;
+  let timerId: ReturnType<typeof setInterval> | null = null;
   const setCanvasRef = (el: HTMLCanvasElement) => {
     canvasEl = el;
   };
@@ -111,8 +113,14 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
         waypointCount(),
       );
       if (res.ok) {
+        const finishTime = Date.now() - startTime();
+        setElapsedMs(finishTime);
+        if (timerId != null) {
+          clearInterval(timerId);
+          timerId = null;
+        }
         setSolved(true);
-        props.onSolve(Date.now() - startTime(), moves() + 1);
+        props.onSolve(finishTime, moves() + 1, newPath);
       }
     }
     return true;
@@ -199,7 +207,8 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
     }
 
     for (let i = 0; i < s * s; i++) {
-      if (b[i] <= 0) continue;
+      const val = b[i];
+      if (typeof val !== "number" || val <= 0) continue;
       const { x, y } = center(i);
       const rad = cs * WAYPOINT_RADIUS_RATIO;
       ctx.fillStyle = "#18181b";
@@ -210,7 +219,7 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
       ctx.font = `bold ${Math.round(rad * 1.1)}px system-ui, sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(String(b[i]), x, y);
+      ctx.fillText(String(val), x, y);
     }
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -225,11 +234,22 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
 
   onMount(() => {
     paint();
+    timerId = setInterval(() => {
+      setElapsedMs(Date.now() - startTime());
+    }, 1000);
   });
 
   onCleanup(() => {
     dragState.active = false;
+    if (timerId != null) clearInterval(timerId);
   });
+
+  const formatTime = (ms: number) => {
+    const totalSec = Math.floor(ms / 1000);
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
 
   const logicalSize = () => {
     const s = size();
@@ -283,6 +303,15 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
 
   return (
     <div class="flex flex-col items-center gap-4">
+      <div
+        class="flex items-center justify-between gap-4 rounded-lg border border-zinc-200 bg-zinc-100/80 px-3 py-2 text-sm"
+        style={{ width: `${logicalSize()}px` }}
+      >
+        <span class="font-mono font-medium text-zinc-700 tabular-nums">
+          {formatTime(elapsedMs())}
+        </span>
+        <span class="text-zinc-500">Moves: {moves()}</span>
+      </div>
       <canvas
         ref={setCanvasRef}
         class="touch-none rounded-lg border-2 border-zinc-300 select-none"
@@ -295,7 +324,7 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
       />
       <p class="text-sm text-zinc-600">
         Connect 1 → 2 → … → {waypointCount()} and fill all path cells. Tap or
-        drag. Moves: {moves()}.
+        drag.
       </p>
     </div>
   );

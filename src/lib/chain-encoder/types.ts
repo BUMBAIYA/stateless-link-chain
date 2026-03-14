@@ -2,6 +2,8 @@ export interface ChainPlayer {
   name: string;
   score: number;
   time: number;
+  /** Zip: player's solution path (cell indices) for novelty check and replay */
+  path?: number[];
 }
 
 export interface ChainState {
@@ -18,4 +20,6 @@ export interface ChainState {
   board?: number[];
   /** Flow/Zip: creation timestamp for 24h expiry */
   createdAt?: number;
+  /** Zip: creator's solution path (cell indices) for novelty check */
+  solution?: number[];
 }

@@ -7,18 +7,24 @@ import { sign } from "@/lib/chain-encoder/sign";
 import { verify } from "@/lib/chain-encoder/verify";
 
 /**
- * Submit a zip game score (name + score + time). Requires unique name.
+ * Submit a zip game score (name + score + time + path). Requires unique name.
  * Returns new chain with link to /play/zip.
  */
 export const POST: APIRoute = async ({ request }): Promise<Response> => {
-  let body: { chain?: string; name?: string; score?: number; time?: number };
+  let body: {
+    chain?: string;
+    name?: string;
+    score?: number;
+    time?: number;
+    path?: number[];
+  };
   try {
     body = await request.json();
   } catch {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { chain, name, score, time } = body;
+  const { chain, name, score, time, path } = body;
   if (chain == null) {
     return Response.json({ error: "chain required" }, { status: 400 });
   }
@@ -71,6 +77,7 @@ export const POST: APIRoute = async ({ request }): Promise<Response> => {
     name: String(name).trim(),
     score: Number(score) || 0,
     time: Number(time) || 0,
+    path: Array.isArray(path) ? path : undefined,
   });
 
   const newPayload = encode(state);

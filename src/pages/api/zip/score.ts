@@ -49,6 +49,7 @@ export const GET: APIRoute = async ({ url }): Promise<Response> => {
     gridSize: state.gridSize,
     waypointCount: state.waypointCount ?? 12,
     board: state.board,
+    solution: state.solution,
     players: state.players,
     createdAt,
     expired,
