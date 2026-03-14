@@ -21,7 +21,7 @@ export const CreateChain: Component<CreateChainProps> = (props) => {
         type="button"
         disabled={props.loading}
         onClick={() => props.onCreate()}
-        class="rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-400 focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-white focus:outline-none disabled:pointer-events-none disabled:opacity-50"
+        class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 focus:ring-offset-white focus:outline-none disabled:pointer-events-none disabled:opacity-50"
       >
         {props.loading ? "Creating…" : "Create new chain"}
       </button>

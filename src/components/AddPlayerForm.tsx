@@ -48,7 +48,7 @@ export const AddPlayerForm: Component<AddPlayerFormProps> = (props) => {
             placeholder="Player name"
             value={name()}
             onInput={(e) => setName(e.currentTarget.value)}
-            class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 focus:outline-none"
+            class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 focus:outline-none"
           />
         </div>
         <div class="grid grid-cols-2 gap-3">
@@ -63,7 +63,7 @@ export const AddPlayerForm: Component<AddPlayerFormProps> = (props) => {
               min="0"
               value={score()}
               onInput={(e) => setScore(e.currentTarget.value)}
-              class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 focus:outline-none"
+              class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 focus:outline-none"
             />
           </div>
           <div>
@@ -93,7 +93,7 @@ export const AddPlayerForm: Component<AddPlayerFormProps> = (props) => {
             type="button"
             disabled={!props.hasChain || props.submitting}
             onClick={submit}
-            class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-400 focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-white focus:outline-none disabled:pointer-events-none disabled:opacity-50"
+            class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 focus:ring-offset-white focus:outline-none disabled:pointer-events-none disabled:opacity-50"
           >
             {props.submitting ? "Adding…" : "Add player"}
           </button>
