@@ -13,6 +13,15 @@ interface ZipGameCanvasProps {
   onSolve: (timeMs: number, moves: number) => void;
 }
 
+/** Get cell index from element (button or child with data-cell-index in tree). */
+function getCellIndexFromElement(el: EventTarget | null): number | null {
+  const node = (el as Element)?.closest?.("[data-cell-index]");
+  if (!node) return null;
+  const v = node.getAttribute("data-cell-index");
+  const idx = v != null ? parseInt(v, 10) : NaN;
+  return Number.isInteger(idx) && idx >= 0 ? idx : null;
+}
+
 export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
   const size = () => props.gridSize;
   const board = () => props.board;
@@ -52,26 +61,35 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
     );
   };
 
-  const handleCellClick = (index: number) => {
-    if (solved()) return;
+  /** Add cell to path (or backtrack one step if index is path[path.length-2]). Returns true if path changed. */
+  const applyCell = (index: number): boolean => {
+    if (solved()) return false;
     const b = board();
     const v = b[index];
-    if (v === BLOCKED) return;
+    if (v === BLOCKED) return false;
 
     const p = path();
     const nextW = nextWaypointExpected();
 
     if (p.length === 0) {
-      if (v !== 1) return;
+      if (v !== 1) return false;
       setPath([index]);
       setMoves((m) => m + 1);
-      return;
+      return true;
     }
 
     const last = p[p.length - 1];
-    if (!isAdjacent(last, index)) return;
-    if (p.includes(index)) return;
-    if (v > 0 && v !== nextW) return;
+    if (index === last) return false;
+
+    if (index === p[p.length - 2]) {
+      setPath(p.slice(0, -1));
+      setMoves((m) => m + 1);
+      return true;
+    }
+
+    if (!isAdjacent(last, index)) return false;
+    if (p.includes(index)) return false;
+    if (v > 0 && v !== nextW) return false;
 
     const newPath = [...p, index];
     setPath(newPath);
@@ -89,6 +107,53 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
         props.onSolve(Date.now() - startTime(), moves() + 1);
       }
     }
+    return true;
+  };
+
+  const handleCellClick = (index: number) => {
+    applyCell(index);
+  };
+
+  const dragState = { lastProcessed: -1, active: false };
+
+  const getCellUnderPointer = (
+    clientX: number,
+    clientY: number,
+  ): number | null => {
+    const el = document.elementFromPoint(clientX, clientY);
+    return getCellIndexFromElement(el);
+  };
+
+  const onPointerDown = (e: PointerEvent) => {
+    if (solved()) return;
+    const idx = getCellIndexFromElement(e.target);
+    if (idx == null) return;
+    if (board()[idx] === BLOCKED) return;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    applyCell(idx);
+    dragState.lastProcessed = idx;
+    dragState.active = true;
+  };
+
+  const onPointerMove = (e: PointerEvent) => {
+    if (!dragState.active) return;
+    const idx = getCellUnderPointer(e.clientX, e.clientY);
+    if (idx == null) return;
+    if (idx === dragState.lastProcessed) return;
+    if (board()[idx] === BLOCKED) return;
+    const p = path();
+    if (p.length > 0 && idx === p[p.length - 2]) {
+      setPath(p.slice(0, -1));
+      setMoves((m) => m + 1);
+      dragState.lastProcessed = idx;
+      return;
+    }
+    if (applyCell(idx)) dragState.lastProcessed = idx;
+  };
+
+  const onPointerUp = () => {
+    dragState.active = false;
+    dragState.lastProcessed = -1;
   };
 
   const cellSize = () => (size() === 7 ? 44 : size() === 5 ? 52 : 72);
@@ -96,11 +161,17 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
   return (
     <div class="flex flex-col items-center gap-4">
       <div
-        class="inline-grid gap-0.5 rounded-lg border-2 border-zinc-400 bg-zinc-400 p-0.5"
+        class="inline-grid touch-none gap-0.5 rounded-lg border-2 border-zinc-400 bg-zinc-400 p-0.5 select-none"
         style={{
           "grid-template-columns": `repeat(${size()}, ${cellSize()}px)`,
           "grid-template-rows": `repeat(${size()}, ${cellSize()}px)`,
+          "touch-action": "none",
         }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerLeave={onPointerUp}
+        onPointerCancel={onPointerUp}
       >
         {Array.from({ length: totalCells() }, (_, i) => {
           const v = board()[i];
@@ -111,6 +182,7 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
           return (
             <button
               type="button"
+              data-cell-index={i}
               disabled={isBlocked}
               onClick={() => handleCellClick(i)}
               class="flex items-center justify-center rounded border-2 text-sm font-bold transition-colors disabled:pointer-events-none"
@@ -140,8 +212,8 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
         })}
       </div>
       <p class="text-sm text-zinc-600">
-        Connect 1 → 2 → … → {waypointCount()} and fill all path cells. Moves:{" "}
-        {moves()}.
+        Connect 1 → 2 → … → {waypointCount()} and fill all path cells. Tap or
+        drag. Moves: {moves()}.
       </p>
     </div>
   );
