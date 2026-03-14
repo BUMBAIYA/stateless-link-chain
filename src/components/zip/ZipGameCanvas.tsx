@@ -1,10 +1,21 @@
-import { createSignal, type Component } from "solid-js";
+import {
+  createEffect,
+  createSignal,
+  onCleanup,
+  onMount,
+  type Component,
+} from "solid-js";
 import {
   BLOCKED,
   pathCellCount,
   validateZipSolution,
   type GridSize,
 } from "@/lib/zip/validate";
+
+const GAP = 2;
+const PAD = 4;
+const PATH_WIDTH_RATIO = 0.58;
+const WAYPOINT_RADIUS_RATIO = 0.38;
 
 interface ZipGameCanvasProps {
   gridSize: GridSize;
@@ -13,20 +24,14 @@ interface ZipGameCanvasProps {
   onSolve: (timeMs: number, moves: number) => void;
 }
 
-/** Get cell index from element (button or child with data-cell-index in tree). */
-function getCellIndexFromElement(el: EventTarget | null): number | null {
-  const node = (el as Element)?.closest?.("[data-cell-index]");
-  if (!node) return null;
-  const v = node.getAttribute("data-cell-index");
-  const idx = v != null ? parseInt(v, 10) : NaN;
-  return Number.isInteger(idx) && idx >= 0 ? idx : null;
+function cellSizeFor(size: GridSize): number {
+  return size === 7 ? 44 : size === 5 ? 52 : 72;
 }
 
 export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
   const size = () => props.gridSize;
   const board = () => props.board;
   const waypointCount = () => props.waypointCount;
-  const totalCells = () => size() * size();
   const requiredPathLen = () => pathCellCount(size(), board());
 
   const [path, setPath] = createSignal<number[]>([]);
@@ -34,7 +39,11 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
   const [moves, setMoves] = createSignal(0);
   const [solved, setSolved] = createSignal(false);
 
-  const pathSet = () => new Set(path());
+  let canvasEl: HTMLCanvasElement | null = null;
+  const setCanvasRef = (el: HTMLCanvasElement) => {
+    canvasEl = el;
+  };
+  const dragState = { lastProcessed: -1, active: false };
 
   /** Next waypoint we need to pass (1..K). */
   const nextWaypointExpected = (): number => {
@@ -61,7 +70,6 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
     );
   };
 
-  /** Add cell to path (or backtrack one step if index is path[path.length-2]). Returns true if path changed. */
   const applyCell = (index: number): boolean => {
     if (solved()) return false;
     const b = board();
@@ -110,23 +118,139 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
     return true;
   };
 
-  const handleCellClick = (index: number) => {
-    applyCell(index);
-  };
-
-  const dragState = { lastProcessed: -1, active: false };
-
-  const getCellUnderPointer = (
-    clientX: number,
-    clientY: number,
+  const getCellFromPoint = (
+    canvasX: number,
+    canvasY: number,
   ): number | null => {
-    const el = document.elementFromPoint(clientX, clientY);
-    return getCellIndexFromElement(el);
+    const cs = cellSizeFor(size());
+    const row = Math.floor((canvasY - PAD) / (cs + GAP));
+    const col = Math.floor((canvasX - PAD) / (cs + GAP));
+    if (row < 0 || row >= size() || col < 0 || col >= size()) return null;
+    return row * size() + col;
   };
 
-  const onPointerDown = (e: PointerEvent) => {
-    if (solved()) return;
-    const idx = getCellIndexFromElement(e.target);
+  const paint = () => {
+    if (!canvasEl) return;
+    const s = size();
+    const b = board();
+    const p = path();
+    const cs = cellSizeFor(s);
+    const dpr =
+      typeof window !== "undefined"
+        ? Math.min(2, window.devicePixelRatio ?? 1)
+        : 1;
+    const totalW = PAD * 2 + s * cs + (s - 1) * GAP;
+    const totalH = totalW;
+
+    canvasEl.width = totalW * dpr;
+    canvasEl.height = totalH * dpr;
+    canvasEl.style.width = `${totalW}px`;
+    canvasEl.style.height = `${totalH}px`;
+
+    const ctx = canvasEl.getContext("2d");
+    if (!ctx) return;
+    ctx.scale(dpr, dpr);
+
+    const center = (index: number) => {
+      const r = Math.floor(index / s);
+      const c = index % s;
+      return {
+        x: PAD + c * (cs + GAP) + cs / 2,
+        y: PAD + r * (cs + GAP) + cs / 2,
+      };
+    };
+
+    ctx.fillStyle = "#f4f4f5";
+    ctx.fillRect(0, 0, totalW, totalH);
+
+    for (let i = 0; i < s * s; i++) {
+      const r = Math.floor(i / s);
+      const c = i % s;
+      const x = PAD + c * (cs + GAP);
+      const y = PAD + r * (cs + GAP);
+      if (b[i] === BLOCKED) {
+        ctx.fillStyle = "#3f3f46";
+        ctx.beginPath();
+        ctx.roundRect(x, y, cs, cs, 4);
+        ctx.fill();
+      } else {
+        ctx.fillStyle = "#fff";
+        ctx.strokeStyle = "#d4d4d8";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(x, y, cs, cs, 4);
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+
+    if (p.length > 0) {
+      const pts = p.map((i) => center(i));
+      ctx.strokeStyle = "#ea580c";
+      ctx.lineWidth = cs * PATH_WIDTH_RATIO;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) {
+        ctx.lineTo(pts[i].x, pts[i].y);
+      }
+      ctx.stroke();
+    }
+
+    for (let i = 0; i < s * s; i++) {
+      if (b[i] <= 0) continue;
+      const { x, y } = center(i);
+      const rad = cs * WAYPOINT_RADIUS_RATIO;
+      ctx.fillStyle = "#18181b";
+      ctx.beginPath();
+      ctx.arc(x, y, rad, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#fff";
+      ctx.font = `bold ${Math.round(rad * 1.1)}px system-ui, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(b[i]), x, y);
+    }
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  };
+
+  createEffect(() => {
+    path();
+    board();
+    size();
+    paint();
+  });
+
+  onMount(() => {
+    paint();
+  });
+
+  onCleanup(() => {
+    dragState.active = false;
+  });
+
+  const logicalSize = () => {
+    const s = size();
+    const cs = cellSizeFor(s);
+    return PAD * 2 + s * cs + (s - 1) * GAP;
+  };
+
+  const clientToLogical = (clientX: number, clientY: number) => {
+    if (!canvasEl) return { x: 0, y: 0 };
+    const rect = canvasEl.getBoundingClientRect();
+    const L = logicalSize();
+    return {
+      x: ((clientX - rect.left) / rect.width) * L,
+      y: ((clientY - rect.top) / rect.height) * L,
+    };
+  };
+
+  const handlePointerDown = (e: PointerEvent) => {
+    if (solved() || !canvasEl) return;
+    const { x: canvasX, y: canvasY } = clientToLogical(e.clientX, e.clientY);
+    const idx = getCellFromPoint(canvasX, canvasY);
     if (idx == null) return;
     if (board()[idx] === BLOCKED) return;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -135,15 +259,16 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
     dragState.active = true;
   };
 
-  const onPointerMove = (e: PointerEvent) => {
-    if (!dragState.active) return;
-    const idx = getCellUnderPointer(e.clientX, e.clientY);
+  const handlePointerMove = (e: PointerEvent) => {
+    if (!dragState.active || !canvasEl) return;
+    const { x: canvasX, y: canvasY } = clientToLogical(e.clientX, e.clientY);
+    const idx = getCellFromPoint(canvasX, canvasY);
     if (idx == null) return;
     if (idx === dragState.lastProcessed) return;
     if (board()[idx] === BLOCKED) return;
-    const p = path();
-    if (p.length > 0 && idx === p[p.length - 2]) {
-      setPath(p.slice(0, -1));
+    const pathArr = path();
+    if (pathArr.length > 0 && idx === pathArr[pathArr.length - 2]) {
+      setPath(pathArr.slice(0, -1));
       setMoves((m) => m + 1);
       dragState.lastProcessed = idx;
       return;
@@ -151,66 +276,23 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
     if (applyCell(idx)) dragState.lastProcessed = idx;
   };
 
-  const onPointerUp = () => {
+  const handlePointerUp = () => {
     dragState.active = false;
     dragState.lastProcessed = -1;
   };
 
-  const cellSize = () => (size() === 7 ? 44 : size() === 5 ? 52 : 72);
-
   return (
     <div class="flex flex-col items-center gap-4">
-      <div
-        class="inline-grid touch-none gap-0.5 rounded-lg border-2 border-zinc-400 bg-zinc-400 p-0.5 select-none"
-        style={{
-          "grid-template-columns": `repeat(${size()}, ${cellSize()}px)`,
-          "grid-template-rows": `repeat(${size()}, ${cellSize()}px)`,
-          "touch-action": "none",
-        }}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerLeave={onPointerUp}
-        onPointerCancel={onPointerUp}
-      >
-        {Array.from({ length: totalCells() }, (_, i) => {
-          const v = board()[i];
-          const inPath = pathSet().has(i);
-          const isBlocked = v === BLOCKED;
-          const isWaypoint = v > 0;
-          const isNextWaypoint = v === nextWaypointExpected() && !inPath;
-          return (
-            <button
-              type="button"
-              data-cell-index={i}
-              disabled={isBlocked}
-              onClick={() => handleCellClick(i)}
-              class="flex items-center justify-center rounded border-2 text-sm font-bold transition-colors disabled:pointer-events-none"
-              classList={{
-                "border-zinc-500 bg-zinc-700": isBlocked,
-                "border-zinc-400 bg-white text-zinc-800":
-                  !isBlocked && !inPath && !isNextWaypoint,
-                "border-orange-400 bg-orange-100": inPath,
-                "ring-2 ring-amber-400 ring-offset-1 bg-amber-50":
-                  isNextWaypoint,
-              }}
-            >
-              {isWaypoint ? (
-                <span
-                  class="flex h-7 w-7 items-center justify-center rounded-full bg-zinc-900 text-white"
-                  classList={{
-                    "ring-2 ring-amber-400": isNextWaypoint && !inPath,
-                  }}
-                >
-                  {v}
-                </span>
-              ) : inPath ? (
-                <span class="h-2 w-2 rounded-full bg-orange-500" />
-              ) : null}
-            </button>
-          );
-        })}
-      </div>
+      <canvas
+        ref={setCanvasRef}
+        class="touch-none rounded-lg border-2 border-zinc-300 select-none"
+        style={{ "touch-action": "none" }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerLeave={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+      />
       <p class="text-sm text-zinc-600">
         Connect 1 → 2 → … → {waypointCount()} and fill all path cells. Tap or
         drag. Moves: {moves()}.
