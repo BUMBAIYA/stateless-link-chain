@@ -7,14 +7,21 @@ import { sign } from "@/lib/chain-encoder/sign";
 import { verify } from "@/lib/chain-encoder/verify";
 
 /**
- * Submit a new score to the stateless link chain.
- * @param request - The request object.
- * @returns {Response} - The response object.
+ * Submit a zip game score (name + score + time). Requires unique name.
+ * Returns new chain with link to /play/zip.
  */
 export const POST: APIRoute = async ({ request }): Promise<Response> => {
-  const body = await request.json();
+  let body: { chain?: string; name?: string; score?: number; time?: number };
+  try {
+    body = await request.json();
+  } catch {
+    return Response.json({ error: "Invalid JSON" }, { status: 400 });
+  }
 
   const { chain, name, score, time } = body;
+  if (chain == null) {
+    return Response.json({ error: "chain required" }, { status: 400 });
+  }
 
   const lastDot = chain.lastIndexOf(".");
   if (lastDot === -1) {
@@ -24,7 +31,6 @@ export const POST: APIRoute = async ({ request }): Promise<Response> => {
   const sig = chain.slice(lastDot + 1);
 
   const valid = await verify(payload, sig);
-
   if (!valid) {
     return Response.json({ error: "Invalid chain" }, { status: 401 });
   }
@@ -39,15 +45,9 @@ export const POST: APIRoute = async ({ request }): Promise<Response> => {
     );
   }
 
-  if (state.gameType === "flow") {
+  if (state.gameType !== "zip") {
     return Response.json(
-      { error: "Flow game chains must use POST /api/flow/submit" },
-      { status: 400 },
-    );
-  }
-  if (state.gameType === "zip") {
-    return Response.json(
-      { error: "Zip game chains must use POST /api/zip/submit" },
+      { error: "Not a zip game chain. Use the correct submit endpoint." },
       { status: 400 },
     );
   }
@@ -56,15 +56,29 @@ export const POST: APIRoute = async ({ request }): Promise<Response> => {
     return Response.json({ error: "Game full" }, { status: 403 });
   }
 
-  state.players.push({ name, score, time });
+  const nameLower = String(name).trim().toLowerCase();
+  if (!nameLower) {
+    return Response.json({ error: "Name is required" }, { status: 400 });
+  }
+  const taken = state.players.some(
+    (p) => p.name.trim().toLowerCase() === nameLower,
+  );
+  if (taken) {
+    return Response.json({ error: "Name already taken" }, { status: 400 });
+  }
+
+  state.players.push({
+    name: String(name).trim(),
+    score: Number(score) || 0,
+    time: Number(time) || 0,
+  });
 
   const newPayload = encode(state);
   const newSig = await sign(newPayload);
-
   const newChain = `${newPayload}.${newSig}`;
 
   return Response.json({
-    link: `/play?g=${encodeURIComponent(newChain)}`,
+    link: `/play/zip?g=${encodeURIComponent(newChain)}`,
     payload: newPayload,
     sig: newSig,
     chain: newChain,
