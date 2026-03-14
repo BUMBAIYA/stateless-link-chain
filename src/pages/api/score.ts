@@ -17,20 +17,33 @@ export const GET: APIRoute = async ({ url }): Promise<Response> => {
     return Response.json({ error: "Missing game chain" }, { status: 400 });
   }
 
-  const [payload, sig] = g.split(".");
-
+  const lastDot = g.lastIndexOf(".");
+  if (lastDot === -1) {
+    return Response.json({ error: "Invalid chain" }, { status: 400 });
+  }
+  const payload = g.slice(0, lastDot);
+  const sig = g.slice(lastDot + 1);
   const valid = await verify(payload, sig);
 
   if (!valid) {
     return Response.json({ error: "Invalid chain" }, { status: 400 });
   }
 
-  const state = decode(payload);
+  let state;
+  try {
+    state = decode(payload);
+  } catch {
+    return Response.json(
+      { error: "Invalid or corrupted payload" },
+      { status: 400 },
+    );
+  }
 
   return Response.json({
     chain: g,
     seed: state.seed,
     players: state.players,
+    maxPlayers: state.maxPlayers,
     totalPlayers: state.players.length,
     remainingSlots: state.maxPlayers - state.players.length,
   });

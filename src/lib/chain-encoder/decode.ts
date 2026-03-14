@@ -1,10 +1,15 @@
+import LZString from "lz-string";
+import type { ChainState } from "./types";
+
 /**
- * Decode the base64 string into a data object.
- * @param payload - The base64 string to decode.
- * @returns The decoded data.
+ * Decompress and decode the payload into chain state.
+ * @param payload - The LZString-compressed, URL-safe payload.
+ * @returns The decoded chain state.
  */
-export function decode(payload: string) {
-  payload = payload.replace(/-/g, "+").replace(/_/g, "/");
-  const json = atob(payload);
-  return JSON.parse(json);
+export function decode(payload: string): ChainState {
+  const json = LZString.decompressFromEncodedURIComponent(payload);
+  if (json == null || json === "") {
+    throw new Error("Invalid or empty payload");
+  }
+  return JSON.parse(json) as ChainState;
 }

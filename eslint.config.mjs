@@ -1,7 +1,9 @@
 import js from "@eslint/js";
 import * as tsParser from "@typescript-eslint/parser";
 import tsPlugin from "@typescript-eslint/eslint-plugin";
+import solidPlugin from "eslint-plugin-solid";
 import globals from "globals";
+import prettierPlugin from "eslint-plugin-prettier";
 
 export default [
   js.configs.recommended,
@@ -9,6 +11,8 @@ export default [
     files: ["**/*.{ts,tsx}"],
     plugins: {
       "@typescript-eslint": tsPlugin,
+      solid: solidPlugin,
+      prettier: prettierPlugin,
     },
     languageOptions: {
       globals: globals.browser,
@@ -29,6 +33,9 @@ export default [
           ignoreRestSiblings: false,
         },
       ],
+      // Solid.js specific rules
+      ...solidPlugin.configs.recommended.rules,
+      ...prettierPlugin.configs.recommended.rules,
     },
   },
   {

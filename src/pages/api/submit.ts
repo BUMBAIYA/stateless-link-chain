@@ -29,7 +29,15 @@ export const POST: APIRoute = async ({ request }): Promise<Response> => {
     return Response.json({ error: "Invalid chain" }, { status: 401 });
   }
 
-  const state = decode(payload);
+  let state;
+  try {
+    state = decode(payload);
+  } catch {
+    return Response.json(
+      { error: "Invalid or corrupted payload" },
+      { status: 400 },
+    );
+  }
 
   if (state.players.length >= state.maxPlayers) {
     return Response.json({ error: "Game full" }, { status: 403 });
@@ -43,7 +51,7 @@ export const POST: APIRoute = async ({ request }): Promise<Response> => {
   const newChain = `${newPayload}.${newSig}`;
 
   return Response.json({
-    link: `/play?g=${newChain}`,
+    link: `/play?g=${encodeURIComponent(newChain)}`,
     payload: newPayload,
     sig: newSig,
     chain: newChain,

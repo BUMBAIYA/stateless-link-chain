@@ -1,11 +1,11 @@
+import LZString from "lz-string";
+
 /**
- * Encode the data into a base64 string.
+ * Encode and compress the data for use in URLs (LZString for shorter chains).
  * @param data - The data to encode.
- * @returns The encoded data.
+ * @returns The encoded, URL-safe string.
  */
-export function encode(data: any) {
-  return btoa(JSON.stringify(data))
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=/g, "");
+export function encode(data: unknown): string {
+  const json = JSON.stringify(data);
+  return LZString.compressToEncodedURIComponent(json) ?? "";
 }

@@ -4,6 +4,8 @@ import tailwindcss from "@tailwindcss/vite";
 import cloudflare from "@astrojs/cloudflare";
 import node from "@astrojs/node";
 
+import solidJs from "@astrojs/solid-js";
+
 /**
  * Get the deployment adapter based on the deployment adapter environment variable.
  *
@@ -38,4 +40,5 @@ export default defineConfig({
   image: {
     service: passthroughImageService(),
   },
+  integrations: [solidJs()],
 });

@@ -22,8 +22,11 @@
     "@astrojs/cloudflare": "^12.2.1",
     "@astrojs/node": "^9.0.2",
     "@astrojs/react": "^4.2.3",
+    "@astrojs/solid-js": "^6.0.0",
     "@tailwindcss/vite": "^4.2.1",
     "astro": "^5.1.9",
+    "lz-string": "^1.5.0",
+    "solid-js": "^1.9.11",
     "tailwindcss": "^4.2.1"
   },
   "devDependencies": {
@@ -32,6 +35,8 @@
     "@typescript-eslint/eslint-plugin": "^8.57.0",
     "@typescript-eslint/parser": "^8.57.0",
     "eslint": "^10.0.3",
+    "eslint-plugin-prettier": "^5.5.5",
+    "eslint-plugin-solid": "^0.14.5",
     "globals": "^17.4.0",
     "node": "^25.8.1",
     "prettier": "3.8.1",

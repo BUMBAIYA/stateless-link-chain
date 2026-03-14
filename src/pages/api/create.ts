@@ -20,7 +20,7 @@ export const POST: APIRoute = async (): Promise<Response> => {
   const chain = `${payload}.${sig}`;
 
   return Response.json({
-    link: `/play?g=${chain}`,
+    link: `/play?g=${encodeURIComponent(chain)}`,
     payload,
     sig,
     chain,
