@@ -1,0 +1,41 @@
+{
+  "name": "stateless-link-chain",
+  "type": "module",
+  "version": "0.0.1",
+  "author": "Amit Chauhan <amitchauhan263871@gmail.com>",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "astro": "astro",
+    "lint": "eslint .",
+    "dev": "astro dev",
+    "prebuild": "pnpm lint",
+    "build": "astro build",
+    "build:cloudflare": "DEPLOYMENT_ADAPTER=cloudflare pnpm build",
+    "preview": "astro preview",
+    "start": "astro preview",
+    "format": "prettier --write \"**/*.{js,mjs,jsx,ts,tsx,json,css,md}\"",
+    "format:check": "prettier --check \"**/*.{js,mjs,jsx,ts,tsx,json,css,md}\""
+  },
+  "dependencies": {
+    "@astrojs/cloudflare": "^12.2.1",
+    "@astrojs/node": "^9.0.2",
+    "@astrojs/react": "^4.2.3",
+    "@tailwindcss/vite": "^4.2.1",
+    "astro": "^5.1.9",
+    "tailwindcss": "^4.2.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^25.5.0",
+    "@typescript-eslint/eslint-plugin": "^8.57.0",
+    "@typescript-eslint/parser": "^8.57.0",
+    "eslint": "^10.0.3",
+    "globals": "^17.4.0",
+    "node": "^25.8.1",
+    "prettier": "3.8.1",
+    "prettier-plugin-astro": "0.14.1",
+    "prettier-plugin-tailwindcss": "^0.7.2"
+  }
+}
