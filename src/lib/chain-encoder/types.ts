@@ -2,7 +2,9 @@ export interface ChainPlayer {
   name: string;
   score: number;
   time: number;
-  /** Zip: player's solution path (cell indices) for novelty check and replay */
+  /** Zip: unique id for this player (nanoid), used to fetch solution from solution API */
+  userId?: string;
+  /** Zip: player's solution path (cell indices); stored in chain, not returned from score API */
   path?: number[];
 }
 
@@ -12,8 +14,8 @@ export interface ChainState {
   maxPlayers: number;
   /** "flow" | "zip" */
   gameType?: "flow" | "zip";
-  /** Flow: 4|5. Zip: 4|5|7 */
-  gridSize?: 4 | 5 | 7;
+  /** Flow: 4|5. Zip: 4..8 */
+  gridSize?: number;
   /** Zip: number of waypoints (e.g. 12) */
   waypointCount?: number;
   /** Flow: flat grid, 0 = empty, 1..n = pair id. Zip: -1=blocked, 0=empty path, 1..K=waypoint */

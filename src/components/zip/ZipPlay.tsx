@@ -1,19 +1,74 @@
-import { createSignal, For, onMount, Show, type Component } from "solid-js";
-import { ZipGameCanvas } from "./ZipGameCanvas";
-import { BLOCKED, type GridSize } from "@/lib/zip/validate";
+import {
+  createEffect,
+  createSignal,
+  For,
+  onMount,
+  Show,
+  type Component,
+} from "solid-js";
+import { nanoid } from "nanoid";
 
-function pathsEqual(a: number[] | undefined, b: number[] | undefined): boolean {
-  if (a == null || b == null) return a === b;
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
-  return true;
+import { ZipGameCanvas } from "@/components/zip/ZipGameCanvas";
+import {
+  BLOCKED,
+  GRID_SIZE_MAX,
+  GRID_SIZE_MIN,
+  type GridSize,
+} from "@/lib/zip/validate";
+
+const SOLUTION_GRID_GAP = 0;
+const SOLUTION_GRID_PAD = 0;
+const SOLUTION_BOARD_RADIUS = 8;
+const SOLUTION_GRID_LINE_WIDTH = 1.5;
+const SOLUTION_BOARD_BORDER_WIDTH = 2;
+const SOLUTION_GRID_STROKE_STYLE = "#a1a1aa";
+const SOLUTION_PATH_WIDTH_RATIO = 0.58;
+const SOLUTION_WAYPOINT_RADIUS_RATIO = 0.38;
+
+function solutionCellSize(size: number): number {
+  if (size >= GRID_SIZE_MIN && size <= GRID_SIZE_MAX) {
+    return Math.round(44 - (size - 4) * 4);
+  }
+  return 28;
+}
+
+const ZIP_USER_ID_COOKIE = "p_id";
+const ZIP_USER_ID_MAX_AGE = 365 * 24 * 60 * 60;
+
+function getZipUserId(): string {
+  if (typeof document === "undefined") return nanoid();
+  const row = document.cookie
+    .split("; ")
+    .find((r) => r.startsWith(ZIP_USER_ID_COOKIE + "="));
+  const existing = row
+    ? decodeURIComponent(row.slice(ZIP_USER_ID_COOKIE.length + 1))
+    : "";
+  if (existing.length > 0) return existing;
+  const id = nanoid();
+  document.cookie =
+    ZIP_USER_ID_COOKIE +
+    "=" +
+    encodeURIComponent(id) +
+    "; path=/; max-age=" +
+    ZIP_USER_ID_MAX_AGE +
+    "; SameSite=Lax";
+  return id;
 }
 
 interface ZipPlayer {
   name: string;
   score: number;
   time: number;
-  path?: number[];
+  userId?: string;
+  isNovel?: boolean;
+}
+
+interface SolutionData {
+  path: number[];
+  board: number[];
+  gridSize: GridSize;
+  name: string;
+  isNovel: boolean;
 }
 
 interface ZipState {
@@ -27,6 +82,142 @@ interface ZipState {
   expired: boolean;
 }
 
+/** Renders the solution as a canvas: board + path line through cells + waypoint numbers (same as game). */
+function SolutionGrid(props: { data: SolutionData }) {
+  let canvasEl: HTMLCanvasElement | null = null;
+
+  const paint = () => {
+    if (!canvasEl) return;
+    const d = props.data;
+    const path = d.path;
+    const s = d.gridSize ?? 7;
+    const b = d.board ?? [];
+    const cs = solutionCellSize(s as GridSize);
+    const totalW = SOLUTION_GRID_PAD * 2 + s * cs + (s - 1) * SOLUTION_GRID_GAP;
+    const totalH = totalW;
+    const dpr =
+      typeof window !== "undefined"
+        ? Math.min(2, window.devicePixelRatio ?? 1)
+        : 1;
+
+    canvasEl.width = totalW * dpr;
+    canvasEl.height = totalH * dpr;
+    canvasEl.style.width = `${totalW}px`;
+    canvasEl.style.height = `${totalH}px`;
+
+    const ctx = canvasEl.getContext("2d");
+    if (!ctx) return;
+    ctx.scale(dpr, dpr);
+
+    const center = (index: number) => {
+      const r = Math.floor(index / s);
+      const c = index % s;
+      return {
+        x: SOLUTION_GRID_PAD + c * (cs + SOLUTION_GRID_GAP) + cs / 2,
+        y: SOLUTION_GRID_PAD + r * (cs + SOLUTION_GRID_GAP) + cs / 2,
+      };
+    };
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(0, 0, totalW, totalH, SOLUTION_BOARD_RADIUS);
+    ctx.clip();
+
+    ctx.fillStyle = "#f4f4f5";
+    ctx.fillRect(0, 0, totalW, totalH);
+
+    for (let i = 0; i < s * s; i++) {
+      const r = Math.floor(i / s);
+      const c = i % s;
+      const x = SOLUTION_GRID_PAD + c * (cs + SOLUTION_GRID_GAP);
+      const y = SOLUTION_GRID_PAD + r * (cs + SOLUTION_GRID_GAP);
+      if (b[i] === BLOCKED) {
+        ctx.fillStyle = "#3f3f46";
+        ctx.fillRect(x, y, cs, cs);
+      } else {
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(x, y, cs, cs);
+        ctx.strokeStyle = SOLUTION_GRID_STROKE_STYLE;
+        ctx.lineWidth = SOLUTION_GRID_LINE_WIDTH;
+        ctx.strokeRect(x, y, cs, cs);
+      }
+    }
+
+    if (path.length > 0) {
+      const pts = path.map((idx) => center(idx));
+      ctx.strokeStyle = "#ea580c";
+      ctx.fillStyle = "#ea580c";
+      ctx.lineWidth = cs * SOLUTION_PATH_WIDTH_RATIO;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) {
+        ctx.lineTo(pts[i].x, pts[i].y);
+      }
+      ctx.stroke();
+      if (path.length === 1) {
+        ctx.beginPath();
+        ctx.arc(
+          pts[0].x,
+          pts[0].y,
+          (cs * SOLUTION_PATH_WIDTH_RATIO) / 2,
+          0,
+          Math.PI * 2,
+        );
+        ctx.fill();
+      }
+    }
+
+    for (let i = 0; i < s * s; i++) {
+      const val = b[i];
+      if (typeof val !== "number" || val <= 0) continue;
+      const { x, y } = center(i);
+      const rad = cs * SOLUTION_WAYPOINT_RADIUS_RATIO;
+      ctx.fillStyle = "#18181b";
+      ctx.beginPath();
+      ctx.arc(x, y, rad, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#fff";
+      ctx.font = `bold ${Math.round(rad * 1.1)}px system-ui, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(val), x, y);
+    }
+
+    ctx.restore();
+
+    ctx.strokeStyle = SOLUTION_GRID_STROKE_STYLE;
+    ctx.lineWidth = SOLUTION_BOARD_BORDER_WIDTH;
+    ctx.beginPath();
+    ctx.roundRect(0, 0, totalW, totalH, SOLUTION_BOARD_RADIUS);
+    ctx.stroke();
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  };
+
+  createEffect(() => {
+    props.data;
+    paint();
+  });
+
+  onMount(() => paint());
+
+  return (
+    <Show
+      when={props.data.path.length > 0}
+      fallback={<p class="text-xs text-zinc-500">No path recorded.</p>}
+    >
+      <canvas
+        ref={(el) => {
+          canvasEl = el;
+        }}
+        aria-label={`${props.data.name}'s solution path`}
+      />
+    </Show>
+  );
+}
+
 export const ZipPlay: Component = () => {
   const [zipState, setZipState] = createSignal<ZipState | null>(null);
   const [loading, setLoading] = createSignal(true);
@@ -37,16 +228,17 @@ export const ZipPlay: Component = () => {
   const [justSolved, setJustSolved] = createSignal(false);
   const [newChain, setNewChain] = createSignal<string | null>(null);
   const [submitError, setSubmitError] = createSignal<string | null>(null);
-  const [viewingSolution, setViewingSolution] = createSignal<{
+  const [viewingPlayer, setViewingPlayer] = createSignal<{
     name: string;
-    path: number[];
+    userId: string;
   } | null>(null);
-
-  const zipPlayedKey = (chain: string) =>
-    "zip_played_" +
-    String(chain.length) +
-    "_" +
-    chain.slice(-40).replace(/[^a-zA-Z0-9]/g, "");
+  const [solutionData, setSolutionData] = createSignal<SolutionData | null>(
+    null,
+  );
+  const [solutionLoading, setSolutionLoading] = createSignal(false);
+  const [yourSolutionData, setYourSolutionData] =
+    createSignal<SolutionData | null>(null);
+  const [yourSolutionLoading, setYourSolutionLoading] = createSignal(false);
 
   const getG = () => {
     if (typeof window === "undefined") return null;
@@ -57,7 +249,11 @@ export const ZipPlay: Component = () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/zip/score?g=${encodeURIComponent(g)}`);
+      const res = await fetch("/api/zip/score", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ g }),
+      });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? "Failed to load game");
@@ -74,17 +270,28 @@ export const ZipPlay: Component = () => {
           name: p.name,
           score: p.score,
           time: p.time,
-          path: p.path,
+          userId: p.userId,
+          isNovel: p.isNovel === true,
         })),
         createdAt: data.createdAt,
         expired: data.expired === true,
       });
+      setYourSolutionData(null);
+      setYourSolutionLoading(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setZipState(null);
     } finally {
       setLoading(false);
     }
+  };
+
+  /** Current user's player entry when they've already played (match by userId cookie). */
+  const currentUserPlayer = (): ZipPlayer | null => {
+    const state = zipState();
+    if (!state?.players?.length) return null;
+    const uid = getZipUserId();
+    return state.players.find((p) => p.userId === uid) ?? null;
   };
 
   onMount(() => {
@@ -96,15 +303,8 @@ export const ZipPlay: Component = () => {
     }
   });
 
-  const alreadyPlayed = () => {
-    const state = zipState();
-    if (!state) return false;
-    try {
-      return localStorage.getItem(zipPlayedKey(state.chain)) === "1";
-    } catch {
-      return false;
-    }
-  };
+  /** User has already submitted if the player list includes our cookie userId. */
+  const alreadyPlayed = () => currentUserPlayer() !== null;
 
   const submitName = () => {
     const name = playerName().trim();
@@ -129,6 +329,7 @@ export const ZipPlay: Component = () => {
     const state = zipState();
     if (!state) return;
     const name = playerName().trim();
+    const userId = getZipUserId();
     setSubmitError(null);
     try {
       const res = await fetch("/api/zip/submit", {
@@ -140,17 +341,13 @@ export const ZipPlay: Component = () => {
           score: moves,
           time: timeMs,
           path,
+          userId,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Submit failed");
       setNewChain(data.chain);
       setJustSolved(true);
-      try {
-        localStorage.setItem(zipPlayedKey(state.chain), "1");
-      } catch {
-        /* ignore */
-      }
       if (data.chain && data.link) {
         if (typeof history !== "undefined") {
           history.replaceState(null, "", data.link);
@@ -160,6 +357,66 @@ export const ZipPlay: Component = () => {
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : String(e));
     }
+  };
+
+  const openSolutionViewer = async (name: string, userId: string) => {
+    setViewingCreatorSolution(false);
+    setViewingPlayer({ name, userId });
+    setSolutionData(null);
+    setSolutionLoading(true);
+    const state = zipState();
+    if (!state) {
+      setSolutionLoading(false);
+      return;
+    }
+    try {
+      const res = await fetch("/api/zip/solution", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ g: state.chain, userId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to load solution");
+      setSolutionData({
+        path: Array.isArray(data.path) ? data.path : [],
+        board: Array.isArray(data.board) ? data.board : [],
+        gridSize: data.gridSize ?? 7,
+        name: data.name ?? name,
+        isNovel: data.isNovel === true,
+      });
+    } catch {
+      setSolutionData(null);
+    } finally {
+      setSolutionLoading(false);
+    }
+  };
+
+  const closeSolutionViewer = () => {
+    setViewingPlayer(null);
+    setSolutionData(null);
+    setViewingCreatorSolution(false);
+  };
+
+  const [viewingCreatorSolution, setViewingCreatorSolution] =
+    createSignal(false);
+
+  const openCreatorSolutionViewer = () => {
+    setViewingCreatorSolution(true);
+    setViewingPlayer(null);
+    setSolutionData(null);
+  };
+
+  /** Creator solution for the viewer (from current state). */
+  const creatorSolutionData = (): SolutionData | null => {
+    const state = zipState();
+    if (!state?.solution || !Array.isArray(state.solution)) return null;
+    return {
+      path: state.solution,
+      board: state.board ?? [],
+      gridSize: state.gridSize ?? 7,
+      name: "Creator",
+      isNovel: false,
+    };
   };
 
   const copyShareLink = () => {
@@ -175,6 +432,33 @@ export const ZipPlay: Component = () => {
         : path;
     navigator.clipboard?.writeText(url);
   };
+
+  // When "You already played" is shown, load the current user's solution for the "Your solution" section.
+  createEffect(() => {
+    if (!alreadyPlayed() || !zipState()) return;
+    const me = currentUserPlayer();
+    if (!me?.userId || yourSolutionData() || yourSolutionLoading()) return;
+    setYourSolutionLoading(true);
+    const state = zipState()!;
+    fetch("/api/zip/solution", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ g: state.chain, userId: me.userId }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.path) {
+          setYourSolutionData({
+            path: Array.isArray(data.path) ? data.path : [],
+            board: Array.isArray(data.board) ? data.board : [],
+            gridSize: data.gridSize ?? 7,
+            name: me.name,
+            isNovel: data.isNovel === true,
+          });
+        }
+      })
+      .finally(() => setYourSolutionLoading(false));
+  });
 
   return (
     <>
@@ -194,49 +478,49 @@ export const ZipPlay: Component = () => {
       </Show>
 
       <Show when={!loading() && zipState()?.expired}>
-        {(state) => (
-          <main class="min-h-screen bg-zinc-50 p-4 font-sans text-zinc-900">
-            <div class="mx-auto max-w-md">
-              <h1 class="mb-2 text-xl font-semibold text-amber-800">
-                Game expired
-              </h1>
-              <p class="mb-4 text-sm text-zinc-600">
-                This link was valid for 24 hours. Here’s the scoreboard:
-              </p>
-              <Show
-                when={state().players.length > 0}
-                fallback={
-                  <p class="text-sm text-zinc-500">No one played yet.</p>
-                }
-              >
-                <ul class="space-y-2 rounded-lg border border-zinc-200 bg-white p-4">
-                  <For
-                    each={[...state().players].sort(
-                      (a, b) => a.score - b.score,
-                    )}
-                  >
-                    {(p, i) => (
-                      <li class="flex justify-between text-sm">
-                        <span>
-                          {i() + 1}. {p.name}
-                        </span>
-                        <span class="text-zinc-500">
-                          {p.score} moves, {Math.round(p.time / 1000)}s
-                        </span>
-                      </li>
-                    )}
-                  </For>
-                </ul>
-              </Show>
-              <a
-                href="/play/zip/create"
-                class="mt-4 inline-block text-emerald-600 hover:underline"
-              >
-                Create a new puzzle
-              </a>
-            </div>
-          </main>
-        )}
+        <main class="min-h-screen bg-zinc-50 p-4 font-sans text-zinc-900">
+          <div class="mx-auto max-w-md">
+            <h1 class="mb-2 text-xl font-semibold text-amber-800">
+              Game expired
+            </h1>
+            <p class="mb-4 text-sm text-zinc-600">
+              This link was valid for 24 hours. Here’s the scoreboard:
+            </p>
+            <Show
+              when={zipState() && zipState()!.players.length > 0}
+              fallback={<p class="text-sm text-zinc-500">No one played yet.</p>}
+            >
+              <ul class="space-y-2 rounded-lg border border-zinc-200 bg-white p-4">
+                <For
+                  each={
+                    zipState()
+                      ? [...zipState()!.players].sort(
+                          (a, b) => a.score - b.score,
+                        )
+                      : []
+                  }
+                >
+                  {(p, i) => (
+                    <li class="flex justify-between text-sm">
+                      <span>
+                        {i() + 1}. {p.name}
+                      </span>
+                      <span class="text-zinc-500">
+                        {p.score} moves, {Math.round(p.time / 1000)}s
+                      </span>
+                    </li>
+                  )}
+                </For>
+              </ul>
+            </Show>
+            <a
+              href="/play/zip/create"
+              class="mt-4 inline-block text-emerald-600 hover:underline"
+            >
+              Create a new puzzle
+            </a>
+          </div>
+        </main>
       </Show>
 
       <Show
@@ -245,14 +529,84 @@ export const ZipPlay: Component = () => {
         }
       >
         <main class="flex min-h-screen flex-col items-center justify-center bg-zinc-50 p-4">
-          <div class="max-w-sm rounded-xl border border-zinc-200 bg-white p-6 text-center">
+          <div class="mx-auto w-full max-w-xl rounded-xl border border-zinc-200 bg-white p-6 text-center">
             <h1 class="mb-2 text-lg font-semibold">You already played</h1>
             <p class="mb-4 text-sm text-zinc-600">
               Share the link with someone else!
             </p>
+            <Show when={currentUserPlayer()}>
+              {(me) => {
+                const player = me();
+                const sorted = () =>
+                  zipState()
+                    ? [...zipState()!.players].sort((a, b) => a.score - b.score)
+                    : [];
+                const rank = () => {
+                  const i = sorted().findIndex(
+                    (p) => p.userId === player.userId,
+                  );
+                  return i >= 0 ? i + 1 : null;
+                };
+                return (
+                  <div class="mb-4 text-left">
+                    <p class="mb-2 text-xs font-medium text-zinc-500">
+                      Your result
+                    </p>
+                    <p class="mb-2 text-sm text-zinc-700">
+                      {rank() != null && (
+                        <>
+                          <span class="font-medium">{player.name}</span> —{" "}
+                          {rank()}
+                          {rank() === 1
+                            ? "st"
+                            : rank() === 2
+                              ? "nd"
+                              : rank() === 3
+                                ? "rd"
+                                : "th"}{" "}
+                          place
+                        </>
+                      )}
+                      {player.score} moves, {Math.round(player.time / 1000)}s
+                      {currentUserPlayer()?.isNovel && (
+                        <span class="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
+                          Novel
+                        </span>
+                      )}
+                    </p>
+                    <p class="mb-1 text-xs font-medium text-zinc-500">
+                      Your solution
+                    </p>
+                    <Show when={yourSolutionLoading()}>
+                      <p class="text-xs text-zinc-500">Loading…</p>
+                    </Show>
+                    <Show when={!yourSolutionLoading() && yourSolutionData()}>
+                      <SolutionGrid data={yourSolutionData()!} />
+                    </Show>
+                  </div>
+                );
+              }}
+            </Show>
             <Show when={zipState() && zipState()!.players.length > 0}>
               <>
-                <p class="mb-2 text-xs font-medium text-zinc-500">Scoreboard</p>
+                <div class="mb-2 flex items-center justify-between">
+                  <p class="text-xs font-medium text-zinc-500">Scoreboard</p>
+                  <Show
+                    when={
+                      zipState()?.solution &&
+                      Array.isArray(zipState()!.solution) &&
+                      zipState()!.solution!.length > 0
+                    }
+                  >
+                    <button
+                      type="button"
+                      onClick={openCreatorSolutionViewer}
+                      class="text-xs text-emerald-600 hover:underline"
+                    >
+                      View actual solution
+                    </button>
+                  </Show>
+                </div>
                 <ul class="mb-2 space-y-1 text-left text-sm">
                   <For
                     each={
@@ -263,97 +617,76 @@ export const ZipPlay: Component = () => {
                         : []
                     }
                   >
-                    {(p, i) => {
-                      const creatorSolution = zipState()?.solution;
-                      const isNovel =
-                        creatorSolution != null &&
-                        p.path != null &&
-                        !pathsEqual(creatorSolution, p.path);
-                      return (
-                        <li class="flex flex-wrap items-center justify-between gap-x-2">
-                          <span>
-                            {i() + 1}. {p.name} — {p.score} moves
-                          </span>
-                          <span class="flex items-center gap-2">
-                            {isNovel && (
-                              <span class="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
-                                Novel
-                              </span>
-                            )}
-                            <Show when={p.path != null && p.path.length > 0}>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setViewingSolution({
-                                    name: p.name,
-                                    path: p.path!,
-                                  })
-                                }
-                                class="text-emerald-600 hover:underline"
-                              >
-                                View
-                              </button>
-                            </Show>
-                          </span>
-                        </li>
-                      );
-                    }}
+                    {(p, i) => (
+                      <li class="flex flex-wrap items-center justify-between gap-x-2">
+                        <span>
+                          {i() + 1}. {p.name} — {p.score} moves
+                        </span>
+                        <span class="flex items-center gap-2">
+                          {p.isNovel && (
+                            <span class="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
+                              Novel
+                            </span>
+                          )}
+                          <Show when={p.userId}>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openSolutionViewer(p.name, p.userId!)
+                              }
+                              class="text-emerald-600 hover:underline"
+                            >
+                              View
+                            </button>
+                          </Show>
+                        </span>
+                      </li>
+                    )}
                   </For>
                 </ul>
-                <Show
-                  when={
-                    viewingSolution() &&
-                    zipState() &&
-                    Array.isArray(viewingSolution()?.path)
-                  }
-                >
-                  {(vs) => {
-                    const state = zipState()!;
-                    const s = state.gridSize ?? 7;
-                    const b = state.board ?? [];
-                    const path = vs().path ?? [];
-                    const pathSet = new Set(path);
-                    const cellPx = 12;
-                    return (
-                      <div class="mb-4 rounded border border-zinc-200 bg-zinc-50 p-2 text-left">
-                        <p class="mb-1 text-xs font-medium text-zinc-600">
-                          {vs().name}'s solution
-                        </p>
-                        {path.length === 0 ? (
-                          <p class="text-xs text-zinc-500">
-                            No path recorded for this player.
-                          </p>
-                        ) : (
-                          <div
-                            class="inline-grid gap-0.5"
-                            style={{
-                              "grid-template-columns": `repeat(${s}, ${cellPx}px)`,
-                              "grid-template-rows": `repeat(${s}, ${cellPx}px)`,
-                            }}
-                          >
-                            {Array.from({ length: s * s }, (_, idx) => (
-                              <div
-                                class="rounded-sm"
-                                classList={{
-                                  "bg-zinc-600": b[idx] === BLOCKED,
-                                  "bg-orange-400": pathSet.has(idx),
-                                  "bg-white":
-                                    b[idx] !== BLOCKED && !pathSet.has(idx),
-                                }}
-                              />
-                            ))}
-                          </div>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => setViewingSolution(null)}
-                          class="mt-1 text-xs text-zinc-500 hover:underline"
-                        >
-                          Close
-                        </button>
-                      </div>
-                    );
-                  }}
+                <Show when={viewingCreatorSolution() && creatorSolutionData()}>
+                  <div class="mb-4 rounded border border-zinc-200 bg-zinc-50 p-2 text-left">
+                    <p class="mb-1 text-xs font-medium text-zinc-600">
+                      Creator's solution
+                    </p>
+                    <SolutionGrid data={creatorSolutionData()!} />
+                    <button
+                      type="button"
+                      onClick={closeSolutionViewer}
+                      class="mt-1 text-xs text-zinc-500 hover:underline"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </Show>
+                <Show when={viewingPlayer()}>
+                  <div class="mb-4 rounded border border-zinc-200 bg-zinc-50 p-2 text-left">
+                    <p class="mb-1 text-xs font-medium text-zinc-600">
+                      {viewingPlayer()!.name}'s solution
+                    </p>
+                    <Show when={solutionLoading()}>
+                      <p class="text-xs text-zinc-500">Loading…</p>
+                    </Show>
+                    <Show when={!solutionLoading() && solutionData()}>
+                      {(sd) => (
+                        <>
+                          {sd().isNovel && (
+                            <span class="mb-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
+                              Novel
+                            </span>
+                          )}
+                          <SolutionGrid data={sd()} />
+                        </>
+                      )}
+                    </Show>
+                    <button
+                      type="button"
+                      onClick={closeSolutionViewer}
+                      class="mt-1 text-xs text-zinc-500 hover:underline"
+                    >
+                      Close
+                    </button>
+                  </div>
                 </Show>
               </>
             </Show>
@@ -399,7 +732,24 @@ export const ZipPlay: Component = () => {
           </div>
           <Show when={zipState() && zipState()!.players.length > 0}>
             <div class="mt-6 w-full max-w-sm">
-              <h2 class="mb-2 text-sm font-medium text-zinc-600">Scoreboard</h2>
+              <div class="mb-2 flex items-center justify-between">
+                <h2 class="text-sm font-medium text-zinc-600">Scoreboard</h2>
+                <Show
+                  when={
+                    zipState()?.solution &&
+                    Array.isArray(zipState()!.solution) &&
+                    zipState()!.solution!.length > 0
+                  }
+                >
+                  <button
+                    type="button"
+                    onClick={openCreatorSolutionViewer}
+                    class="text-sm text-emerald-600 hover:underline"
+                  >
+                    View actual solution
+                  </button>
+                </Show>
+              </div>
               <ul class="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
                 <For
                   each={
@@ -410,100 +760,79 @@ export const ZipPlay: Component = () => {
                       : []
                   }
                 >
-                  {(p, i) => {
-                    const creatorSolution = zipState()?.solution;
-                    const isNovel =
-                      creatorSolution != null &&
-                      p.path != null &&
-                      !pathsEqual(creatorSolution, p.path);
-                    return (
-                      <li class="flex flex-wrap items-center justify-between gap-x-2 border-b border-zinc-100 py-2 text-sm last:border-0">
-                        <span>
-                          {i() + 1}. {p.name}
-                        </span>
-                        <span class="flex items-center gap-2">
-                          {isNovel && (
-                            <span class="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
-                              Novel
-                            </span>
-                          )}
-                          <span class="text-zinc-500">
-                            {p.score} moves, {Math.round(p.time / 1000)}s
+                  {(p, i) => (
+                    <li class="flex flex-wrap items-center justify-between gap-x-2 border-b border-zinc-100 py-2 text-sm last:border-0">
+                      <span>
+                        {i() + 1}. {p.name}
+                      </span>
+                      <span class="flex items-center gap-2">
+                        {p.isNovel && (
+                          <span class="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
+                            Novel
                           </span>
-                          <Show when={p.path != null && p.path.length > 0}>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setViewingSolution({
-                                  name: p.name,
-                                  path: p.path!,
-                                })
-                              }
-                              class="text-emerald-600 hover:underline"
-                            >
-                              View
-                            </button>
-                          </Show>
+                        )}
+                        <span class="text-zinc-500">
+                          {p.score} moves, {Math.round(p.time / 1000)}s
                         </span>
-                      </li>
-                    );
-                  }}
+                        <Show when={p.userId}>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              openSolutionViewer(p.name, p.userId!)
+                            }
+                            class="text-emerald-600 hover:underline"
+                          >
+                            View
+                          </button>
+                        </Show>
+                      </span>
+                    </li>
+                  )}
                 </For>
               </ul>
-              <Show
-                when={
-                  viewingSolution() &&
-                  zipState() &&
-                  Array.isArray(viewingSolution()?.path)
-                }
-              >
-                {(vs) => {
-                  const state = zipState()!;
-                  const s = state.gridSize ?? 7;
-                  const b = state.board ?? [];
-                  const path = vs().path ?? [];
-                  const pathSet = new Set(path);
-                  const cellPx = 12;
-                  return (
-                    <div class="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
-                      <p class="mb-2 text-xs font-medium text-zinc-600">
-                        {vs().name}'s solution
-                      </p>
-                      {path.length === 0 ? (
-                        <p class="text-xs text-zinc-500">
-                          No path recorded for this player.
-                        </p>
-                      ) : (
-                        <div
-                          class="inline-grid gap-0.5"
-                          style={{
-                            "grid-template-columns": `repeat(${s}, ${cellPx}px)`,
-                            "grid-template-rows": `repeat(${s}, ${cellPx}px)`,
-                          }}
-                        >
-                          {Array.from({ length: s * s }, (_, idx) => (
-                            <div
-                              class="rounded-sm"
-                              classList={{
-                                "bg-zinc-600": b[idx] === BLOCKED,
-                                "bg-orange-400": pathSet.has(idx),
-                                "bg-white":
-                                  b[idx] !== BLOCKED && !pathSet.has(idx),
-                              }}
-                            />
-                          ))}
-                        </div>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => setViewingSolution(null)}
-                        class="mt-2 text-xs text-zinc-500 hover:underline"
-                      >
-                        Close
-                      </button>
-                    </div>
-                  );
-                }}
+              <Show when={viewingCreatorSolution() && creatorSolutionData()}>
+                <div class="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+                  <p class="mb-2 text-xs font-medium text-zinc-600">
+                    Creator's solution
+                  </p>
+                  <SolutionGrid data={creatorSolutionData()!} />
+                  <button
+                    type="button"
+                    onClick={closeSolutionViewer}
+                    class="mt-2 text-xs text-zinc-500 hover:underline"
+                  >
+                    Close
+                  </button>
+                </div>
+              </Show>
+              <Show when={viewingPlayer()}>
+                <div class="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+                  <p class="mb-2 text-xs font-medium text-zinc-600">
+                    {viewingPlayer()!.name}'s solution
+                  </p>
+                  <Show when={solutionLoading()}>
+                    <p class="text-xs text-zinc-500">Loading…</p>
+                  </Show>
+                  <Show when={!solutionLoading() && solutionData()}>
+                    {(sd) => (
+                      <>
+                        {sd().isNovel && (
+                          <span class="mb-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
+                            Novel
+                          </span>
+                        )}
+                        <SolutionGrid data={sd()} />
+                      </>
+                    )}
+                  </Show>
+                  <button
+                    type="button"
+                    onClick={closeSolutionViewer}
+                    class="mt-2 text-xs text-zinc-500 hover:underline"
+                  >
+                    Close
+                  </button>
+                </div>
               </Show>
             </div>
           </Show>
@@ -538,7 +867,24 @@ export const ZipPlay: Component = () => {
               <p class="mt-2 text-sm text-red-600">{submitError()}</p>
             </Show>
             <div class="mt-8 w-full max-w-sm">
-              <h2 class="mb-2 text-sm font-medium text-zinc-600">Scoreboard</h2>
+              <div class="mb-2 flex items-center justify-between">
+                <h2 class="text-sm font-medium text-zinc-600">Scoreboard</h2>
+                <Show
+                  when={
+                    zipState()?.solution &&
+                    Array.isArray(zipState()!.solution) &&
+                    zipState()!.solution!.length > 0
+                  }
+                >
+                  <button
+                    type="button"
+                    onClick={openCreatorSolutionViewer}
+                    class="text-sm text-emerald-600 hover:underline"
+                  >
+                    View actual solution
+                  </button>
+                </Show>
+              </div>
               <ul class="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
                 <Show
                   when={zipState()!.players.length > 0}
@@ -553,107 +899,83 @@ export const ZipPlay: Component = () => {
                       (a, b) => a.score - b.score,
                     )}
                   >
-                    {(p, i) => {
-                      const creatorSolution = zipState()!.solution;
-                      const isNovel =
-                        creatorSolution != null &&
-                        p.path != null &&
-                        !pathsEqual(creatorSolution, p.path);
-                      return (
-                        <li class="flex flex-wrap items-center justify-between gap-x-2 border-b border-zinc-100 py-2 text-sm last:border-0">
-                          <span>
-                            {i() + 1}. {p.name}
-                          </span>
-                          <span class="flex items-center gap-2">
-                            {isNovel && (
-                              <span
-                                class="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800"
-                                title="Different solution from creator"
-                              >
-                                Novel
-                              </span>
-                            )}
-                            <span class="text-zinc-500">
-                              {p.score} moves, {Math.round(p.time / 1000)}s
+                    {(p, i) => (
+                      <li class="flex flex-wrap items-center justify-between gap-x-2 border-b border-zinc-100 py-2 text-sm last:border-0">
+                        <span>
+                          {i() + 1}. {p.name}
+                        </span>
+                        <span class="flex items-center gap-2">
+                          {p.isNovel && (
+                            <span
+                              class="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800"
+                              title="Different solution from creator"
+                            >
+                              Novel
                             </span>
-                            <Show when={p.path != null && p.path.length > 0}>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setViewingSolution({
-                                    name: p.name,
-                                    path: p.path!,
-                                  })
-                                }
-                                class="text-emerald-600 hover:underline"
-                              >
-                                View
-                              </button>
-                            </Show>
+                          )}
+                          <span class="text-zinc-500">
+                            {p.score} moves, {Math.round(p.time / 1000)}s
                           </span>
-                        </li>
-                      );
-                    }}
+                          <Show when={p.userId}>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openSolutionViewer(p.name, p.userId!)
+                              }
+                              class="text-emerald-600 hover:underline"
+                            >
+                              View
+                            </button>
+                          </Show>
+                        </span>
+                      </li>
+                    )}
                   </For>
                 </Show>
               </ul>
-              <Show
-                when={
-                  viewingSolution() &&
-                  zipState() &&
-                  Array.isArray(viewingSolution()?.path)
-                }
-              >
-                {(vs) => {
-                  const state = zipState()!;
-                  const s = state.gridSize ?? 7;
-                  const b = state.board ?? [];
-                  const path = vs().path ?? [];
-                  const pathSet = new Set(path);
-                  const cellPx = 12;
-                  return (
-                    <div class="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
-                      <p class="mb-2 text-xs font-medium text-zinc-600">
-                        {vs().name}'s solution
-                      </p>
-                      {path.length === 0 ? (
-                        <p class="text-xs text-zinc-500">
-                          No path recorded for this player.
-                        </p>
-                      ) : (
-                        <div
-                          class="inline-grid gap-0.5"
-                          style={{
-                            "grid-template-columns": `repeat(${s}, ${cellPx}px)`,
-                            "grid-template-rows": `repeat(${s}, ${cellPx}px)`,
-                          }}
-                        >
-                          {Array.from({ length: s * s }, (_, idx) => {
-                            const blocked = b[idx] === BLOCKED;
-                            const inPath = pathSet.has(idx);
-                            return (
-                              <div
-                                class="rounded-sm"
-                                classList={{
-                                  "bg-zinc-600": blocked,
-                                  "bg-orange-400": !blocked && inPath,
-                                  "bg-white": !blocked && !inPath,
-                                }}
-                              />
-                            );
-                          })}
-                        </div>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => setViewingSolution(null)}
-                        class="mt-2 text-xs text-zinc-500 hover:underline"
-                      >
-                        Close
-                      </button>
-                    </div>
-                  );
-                }}
+              <Show when={viewingCreatorSolution() && creatorSolutionData()}>
+                <div class="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+                  <p class="mb-2 text-xs font-medium text-zinc-600">
+                    Creator's solution
+                  </p>
+                  <SolutionGrid data={creatorSolutionData()!} />
+                  <button
+                    type="button"
+                    onClick={closeSolutionViewer}
+                    class="mt-2 text-xs text-zinc-500 hover:underline"
+                  >
+                    Close
+                  </button>
+                </div>
+              </Show>
+              <Show when={viewingPlayer()}>
+                <div class="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+                  <p class="mb-2 text-xs font-medium text-zinc-600">
+                    {viewingPlayer()!.name}'s solution
+                  </p>
+                  <Show when={solutionLoading()}>
+                    <p class="text-xs text-zinc-500">Loading…</p>
+                  </Show>
+                  <Show when={!solutionLoading() && solutionData()}>
+                    {(sd) => (
+                      <>
+                        {sd().isNovel && (
+                          <span class="mb-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
+                            Novel
+                          </span>
+                        )}
+                        <SolutionGrid data={sd()} />
+                      </>
+                    )}
+                  </Show>
+                  <button
+                    type="button"
+                    onClick={closeSolutionViewer}
+                    class="mt-2 text-xs text-zinc-500 hover:underline"
+                  >
+                    Close
+                  </button>
+                </div>
               </Show>
             </div>
             <Show when={justSolved() && newChain()}>

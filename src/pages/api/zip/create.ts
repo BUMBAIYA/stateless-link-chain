@@ -3,12 +3,17 @@ import type { APIRoute } from "astro";
 
 import { encode } from "@/lib/chain-encoder/encode";
 import { sign } from "@/lib/chain-encoder/sign";
-import type { GridSize } from "@/lib/zip/validate";
+import {
+  GRID_SIZE_MAX,
+  GRID_SIZE_MIN,
+  type GridSize,
+  isValidGridSize,
+} from "@/lib/zip/validate";
 import { validateZipBoard, validateZipSolution } from "@/lib/zip/validate";
 
 /**
  * Create a new zip game chain. Board: -1=blocked, 0=empty path, 1..waypointCount=waypoints.
- * Body: { gridSize: 4|5|7, board: number[], waypointCount: number, solution?: number[] }
+ * Body: { gridSize: 4..8, board: number[], waypointCount: number, solution?: number[] }
  */
 export const POST: APIRoute = async ({ request }): Promise<Response> => {
   let body: {
@@ -24,9 +29,9 @@ export const POST: APIRoute = async ({ request }): Promise<Response> => {
   }
 
   const { gridSize, board, waypointCount, solution } = body;
-  if (gridSize !== 4 && gridSize !== 5 && gridSize !== 7) {
+  if (!isValidGridSize(gridSize)) {
     return Response.json(
-      { error: "gridSize must be 4, 5, or 7" },
+      { error: `gridSize must be ${GRID_SIZE_MIN} to ${GRID_SIZE_MAX}` },
       { status: 400 },
     );
   }
@@ -53,6 +58,7 @@ export const POST: APIRoute = async ({ request }): Promise<Response> => {
     if (!solRes.ok) {
       return Response.json({ error: solRes.error }, { status: 400 });
     }
+    // Only store solution when it visits waypoints 1→2→…→K in order.
   }
 
   const state = {

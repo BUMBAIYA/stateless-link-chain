@@ -4,7 +4,19 @@
  * passing through waypoints 1→2→…→K in order.
  */
 
-export type GridSize = 4 | 5 | 7;
+export const GRID_SIZE_MIN = 4;
+export const GRID_SIZE_MAX = 8;
+
+export type GridSize = number;
+
+export function isValidGridSize(n: unknown): n is GridSize {
+  return (
+    typeof n === "number" &&
+    Number.isInteger(n) &&
+    n >= GRID_SIZE_MIN &&
+    n <= GRID_SIZE_MAX
+  );
+}
 
 export const BLOCKED = -1;
 
@@ -189,6 +201,15 @@ export function validateZipSolution(
   }
   if (nextWaypoint !== waypointCount + 1) {
     return { ok: false, error: "Path must visit all waypoints in order" };
+  }
+  if (board[path[0]] !== 1) {
+    return { ok: false, error: "Path must start on waypoint 1" };
+  }
+  if (board[path[path.length - 1]] !== waypointCount) {
+    return {
+      ok: false,
+      error: "Path must end on the last waypoint",
+    };
   }
   return { ok: true };
 }

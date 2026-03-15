@@ -5,6 +5,7 @@ import { decode } from "@/lib/chain-encoder/decode";
 import { encode } from "@/lib/chain-encoder/encode";
 import { sign } from "@/lib/chain-encoder/sign";
 import { verify } from "@/lib/chain-encoder/verify";
+import { normalizeZipState } from "@/lib/zip/normalize-chain";
 
 /**
  * Submit a zip game score (name + score + time + path). Requires unique name.
@@ -17,6 +18,7 @@ export const POST: APIRoute = async ({ request }): Promise<Response> => {
     score?: number;
     time?: number;
     path?: number[];
+    userId?: string;
   };
   try {
     body = await request.json();
@@ -24,10 +26,24 @@ export const POST: APIRoute = async ({ request }): Promise<Response> => {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { chain, name, score, time, path } = body;
+  const { chain, name, score, time, path: pathRaw, userId } = body;
   if (chain == null) {
     return Response.json({ error: "chain required" }, { status: 400 });
   }
+  const userIdStr =
+    typeof userId === "string" && userId.length > 0 ? userId : undefined;
+  const path = Array.isArray(pathRaw)
+    ? pathRaw
+    : typeof pathRaw === "string"
+      ? (() => {
+          try {
+            const parsed = JSON.parse(pathRaw) as unknown;
+            return Array.isArray(parsed) ? parsed : [];
+          } catch {
+            return [];
+          }
+        })()
+      : [];
 
   const lastDot = chain.lastIndexOf(".");
   if (lastDot === -1) {
@@ -58,6 +74,8 @@ export const POST: APIRoute = async ({ request }): Promise<Response> => {
     );
   }
 
+  state = normalizeZipState(state);
+
   if (state.players.length >= state.maxPlayers) {
     return Response.json({ error: "Game full" }, { status: 403 });
   }
@@ -77,7 +95,8 @@ export const POST: APIRoute = async ({ request }): Promise<Response> => {
     name: String(name).trim(),
     score: Number(score) || 0,
     time: Number(time) || 0,
-    path: Array.isArray(path) ? path : undefined,
+    userId: userIdStr,
+    path,
   });
 
   const newPayload = encode(state);

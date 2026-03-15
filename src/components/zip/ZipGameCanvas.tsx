@@ -5,15 +5,22 @@ import {
   onMount,
   type Component,
 } from "solid-js";
+
 import {
   BLOCKED,
+  GRID_SIZE_MAX,
+  GRID_SIZE_MIN,
   pathCellCount,
   validateZipSolution,
   type GridSize,
 } from "@/lib/zip/validate";
 
-const GAP = 2;
-const PAD = 4;
+const GAP = 0;
+const PAD = 0;
+const BOARD_RADIUS = 12;
+const GRID_LINE_WIDTH = 2;
+const BOARD_BORDER_WIDTH = 3;
+const GRID_STROKE_STYLE = "#a1a1aa";
 const PATH_WIDTH_RATIO = 0.58;
 const WAYPOINT_RADIUS_RATIO = 0.38;
 
@@ -24,8 +31,11 @@ interface ZipGameCanvasProps {
   onSolve: (timeMs: number, moves: number, path: number[]) => void;
 }
 
-function cellSizeFor(size: GridSize): number {
-  return size === 7 ? 44 : size === 5 ? 52 : 72;
+function cellSizeFor(size: number): number {
+  if (size >= GRID_SIZE_MIN && size <= GRID_SIZE_MAX) {
+    return Math.round(72 - (size - 4) * 8);
+  }
+  return 44;
 }
 
 export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
@@ -93,6 +103,14 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
 
     if (index === p[p.length - 2]) {
       setPath(p.slice(0, -1));
+      setMoves((m) => m + 1);
+      return true;
+    }
+
+    // Click on a cell already in the path (but not last): truncate path to end there
+    const pos = p.indexOf(index);
+    if (pos >= 0 && pos < p.length - 1) {
+      setPath(p.slice(0, pos + 1));
       setMoves((m) => m + 1);
       return true;
     }
@@ -168,6 +186,11 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
       };
     };
 
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(0, 0, totalW, totalH, BOARD_RADIUS);
+    ctx.clip();
+
     ctx.fillStyle = "#f4f4f5";
     ctx.fillRect(0, 0, totalW, totalH);
 
@@ -178,23 +201,33 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
       const y = PAD + r * (cs + GAP);
       if (b[i] === BLOCKED) {
         ctx.fillStyle = "#3f3f46";
-        ctx.beginPath();
-        ctx.roundRect(x, y, cs, cs, 4);
-        ctx.fill();
+        ctx.fillRect(x, y, cs, cs);
       } else {
         ctx.fillStyle = "#fff";
-        ctx.strokeStyle = "#d4d4d8";
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.roundRect(x, y, cs, cs, 4);
-        ctx.fill();
-        ctx.stroke();
+        ctx.fillRect(x, y, cs, cs);
+        ctx.strokeStyle = GRID_STROKE_STYLE;
+        ctx.lineWidth = GRID_LINE_WIDTH;
+        ctx.strokeRect(x, y, cs, cs);
       }
+    }
+
+    if (p.length === 1) {
+      const startIdx = p[0];
+      const r = Math.floor(startIdx / s);
+      const c = startIdx % s;
+      const x = PAD + c * (cs + GAP);
+      const y = PAD + r * (cs + GAP);
+      ctx.fillStyle = "#ffedd5";
+      ctx.fillRect(x, y, cs, cs);
+      ctx.strokeStyle = GRID_STROKE_STYLE;
+      ctx.lineWidth = GRID_LINE_WIDTH;
+      ctx.strokeRect(x, y, cs, cs);
     }
 
     if (p.length > 0) {
       const pts = p.map((i) => center(i));
       ctx.strokeStyle = "#ea580c";
+      ctx.fillStyle = "#ea580c";
       ctx.lineWidth = cs * PATH_WIDTH_RATIO;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
@@ -204,6 +237,17 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
         ctx.lineTo(pts[i].x, pts[i].y);
       }
       ctx.stroke();
+      if (p.length === 1) {
+        ctx.beginPath();
+        ctx.arc(
+          pts[0].x,
+          pts[0].y,
+          (cs * PATH_WIDTH_RATIO) / 2,
+          0,
+          Math.PI * 2,
+        );
+        ctx.fill();
+      }
     }
 
     for (let i = 0; i < s * s; i++) {
@@ -221,6 +265,14 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
       ctx.textBaseline = "middle";
       ctx.fillText(String(val), x, y);
     }
+
+    ctx.restore();
+
+    ctx.strokeStyle = GRID_STROKE_STYLE;
+    ctx.lineWidth = BOARD_BORDER_WIDTH;
+    ctx.beginPath();
+    ctx.roundRect(0, 0, totalW, totalH, BOARD_RADIUS);
+    ctx.stroke();
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   };
@@ -314,7 +366,7 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
       </div>
       <canvas
         ref={setCanvasRef}
-        class="touch-none rounded-lg border-2 border-zinc-300 select-none"
+        class="touch-none select-none"
         style={{ "touch-action": "none" }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}

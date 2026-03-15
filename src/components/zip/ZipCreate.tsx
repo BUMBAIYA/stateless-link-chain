@@ -1,12 +1,18 @@
 import {
   createEffect,
   createSignal,
+  For,
   onCleanup,
   onMount,
   Show,
   type Component,
 } from "solid-js";
-import type { GridSize } from "@/lib/zip/validate";
+
+import {
+  GRID_SIZE_MAX,
+  GRID_SIZE_MIN,
+  type GridSize,
+} from "@/lib/zip/validate";
 import {
   BLOCKED,
   pathCellCount,
@@ -15,13 +21,22 @@ import {
   validateZipSolution,
 } from "@/lib/zip/validate";
 
-const GAP = 2;
-const PAD = 4;
+const GAP = 0;
+const PAD = 0;
+const BOARD_RADIUS = 12;
+const GRID_LINE_WIDTH = 2;
+const BOARD_BORDER_WIDTH = 3;
+const GRID_STROKE_STYLE = "#a1a1aa";
 const PATH_WIDTH_RATIO = 0.58;
 const WAYPOINT_RADIUS_RATIO = 0.38;
 
-function cellSizeFor(s: GridSize): number {
-  return s === 7 ? 44 : s === 5 ? 52 : 72;
+const GRID_SIZE_OPTIONS = [4, 5, 6, 7, 8] as const;
+
+function cellSizeFor(s: number): number {
+  if (s >= GRID_SIZE_MIN && s <= GRID_SIZE_MAX) {
+    return Math.round(72 - (s - 4) * 8);
+  }
+  return 44;
 }
 
 type CreateMode = "path" | "waypoints";
@@ -51,24 +66,17 @@ export const ZipCreate: Component = () => {
     setError(null);
   };
 
-  const handleResize = (s: GridSize) => {
-    setGridSize(s);
-    setBoard(Array(s * s).fill(0));
+  const handleResize = (s: number) => {
+    const size = Math.max(
+      GRID_SIZE_MIN,
+      Math.min(GRID_SIZE_MAX, Math.floor(s)),
+    );
+    setGridSize(size as GridSize);
+    setBoard(Array(size * size).fill(0));
     setMode("path");
     setSolutionPath([]);
     setNextWaypoint(1);
     setLink(null);
-    setError(null);
-  };
-
-  const addCenterPlus = () => {
-    if (size() !== 7) return;
-    const b = [...board()];
-    const mid = 3;
-    for (let c = 0; c < 7; c++) b[mid * 7 + c] = BLOCKED;
-    for (let r = 0; r < 7; r++) b[r * 7 + mid] = BLOCKED;
-    setBoard(b);
-    setSolutionPath([]);
     setError(null);
   };
 
@@ -98,8 +106,15 @@ export const ZipCreate: Component = () => {
       return;
     }
     const last = p[p.length - 1];
+    // Click on a cell already in the path (but not last): truncate path to end there
+    const pos = p.indexOf(index);
+    if (pos >= 0 && pos < p.length - 1) {
+      setSolutionPath(p.slice(0, pos + 1));
+      setError(null);
+      return;
+    }
+    if (index === last) return;
     if (!isAdjacent(last, index)) return;
-    if (p.includes(index)) return;
 
     setSolutionPath([...p, index]);
     setError(null);
@@ -267,6 +282,11 @@ export const ZipCreate: Component = () => {
       };
     };
 
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(0, 0, totalW, totalH, BOARD_RADIUS);
+    ctx.clip();
+
     ctx.fillStyle = "#f4f4f5";
     ctx.fillRect(0, 0, totalW, totalH);
 
@@ -278,23 +298,20 @@ export const ZipCreate: Component = () => {
       const cellVal = b[i];
       if (cellVal === BLOCKED) {
         ctx.fillStyle = "#3f3f46";
-        ctx.beginPath();
-        ctx.roundRect(x, y, cs, cs, 4);
-        ctx.fill();
+        ctx.fillRect(x, y, cs, cs);
       } else {
         ctx.fillStyle = "#fff";
-        ctx.strokeStyle = "#d4d4d8";
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.roundRect(x, y, cs, cs, 4);
-        ctx.fill();
-        ctx.stroke();
+        ctx.fillRect(x, y, cs, cs);
+        ctx.strokeStyle = GRID_STROKE_STYLE;
+        ctx.lineWidth = GRID_LINE_WIDTH;
+        ctx.strokeRect(x, y, cs, cs);
       }
     }
 
     if (p.length > 0) {
       const pts = p.map((i) => center(i));
       ctx.strokeStyle = "#ea580c";
+      ctx.fillStyle = "#ea580c";
       ctx.lineWidth = cs * PATH_WIDTH_RATIO;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
@@ -304,6 +321,17 @@ export const ZipCreate: Component = () => {
         ctx.lineTo(pts[i].x, pts[i].y);
       }
       ctx.stroke();
+      if (p.length === 1) {
+        ctx.beginPath();
+        ctx.arc(
+          pts[0].x,
+          pts[0].y,
+          (cs * PATH_WIDTH_RATIO) / 2,
+          0,
+          Math.PI * 2,
+        );
+        ctx.fill();
+      }
     }
 
     for (let i = 0; i < s * s; i++) {
@@ -321,6 +349,14 @@ export const ZipCreate: Component = () => {
       ctx.textBaseline = "middle";
       ctx.fillText(String(val), x, y);
     }
+
+    ctx.restore();
+
+    ctx.strokeStyle = GRID_STROKE_STYLE;
+    ctx.lineWidth = BOARD_BORDER_WIDTH;
+    ctx.beginPath();
+    ctx.roundRect(0, 0, totalW, totalH, BOARD_RADIUS);
+    ctx.stroke();
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   };
@@ -385,57 +421,34 @@ export const ZipCreate: Component = () => {
       <div class="mx-auto max-w-lg">
         <h1 class="mb-2 text-xl font-semibold">Create Zip puzzle</h1>
         <p class="mb-4 text-sm text-zinc-600">
-          Add obstacles (e.g. center plus), then <strong>draw the path</strong>{" "}
-          to fill all cells. After that, <strong>place waypoint numbers</strong>{" "}
-          (1, 2, 3, …) on the path in order. Use as many waypoints as you like.
+          <strong>Draw the path</strong> to fill all cells. After that,{" "}
+          <strong>place waypoint numbers</strong> (1, 2, 3, …) on the path in
+          order. Place <strong>1 on the path start</strong> and the{" "}
+          <strong>last number on the path end</strong>. Use as many waypoints as
+          you like.
         </p>
 
         <div class="mb-4 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => handleResize(4)}
-            class="rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors"
-            classList={{
-              "border-emerald-500 bg-emerald-50 text-emerald-700": size() === 4,
-              "border-zinc-300 bg-white text-zinc-600 hover:bg-zinc-50":
-                size() !== 4,
-            }}
-          >
-            4×4
-          </button>
-          <button
-            type="button"
-            onClick={() => handleResize(5)}
-            class="rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors"
-            classList={{
-              "border-emerald-500 bg-emerald-50 text-emerald-700": size() === 5,
-              "border-zinc-300 bg-white text-zinc-600 hover:bg-zinc-50":
-                size() !== 5,
-            }}
-          >
-            5×5
-          </button>
-          <button
-            type="button"
-            onClick={() => handleResize(7)}
-            class="rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors"
-            classList={{
-              "border-emerald-500 bg-emerald-50 text-emerald-700": size() === 7,
-              "border-zinc-300 bg-white text-zinc-600 hover:bg-zinc-50":
-                size() !== 7,
-            }}
-          >
-            7×7
-          </button>
-          <Show when={size() === 7}>
-            <button
-              type="button"
-              onClick={addCenterPlus}
-              class="rounded-lg border border-amber-400 bg-amber-50 px-3 py-1.5 text-sm text-amber-800 hover:bg-amber-100"
-            >
-              Add center plus
-            </button>
-          </Show>
+          <For each={GRID_SIZE_OPTIONS}>
+            {(n) => (
+              <button
+                type="button"
+                onClick={() => handleResize(n)}
+                class="rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors"
+                classList={{
+                  "border-emerald-500 bg-emerald-50 text-emerald-700":
+                    size() === n,
+                  "border-zinc-300 bg-white text-zinc-600 hover:bg-zinc-50":
+                    size() !== n,
+                }}
+              >
+                {n}×{n}
+              </button>
+            )}
+          </For>
+        </div>
+
+        <div class="mb-4 flex flex-wrap gap-2">
           <Show when={mode() === "path"}>
             <button
               type="button"
@@ -483,7 +496,7 @@ export const ZipCreate: Component = () => {
 
         <canvas
           ref={setCanvasRef}
-          class="touch-none rounded-lg border-2 border-zinc-300 select-none"
+          class="touch-none select-none"
           style={{ "touch-action": "none" }}
           onPointerDown={onCanvasPointerDown}
           onPointerMove={onCanvasPointerMove}
