@@ -57,8 +57,7 @@ export const GET: APIRoute = async ({ url }): Promise<Response> => {
   const isNovel =
     Array.isArray(solution) &&
     path.length > 0 &&
-    (solution.length !== path.length ||
-      solution.some((v, i) => v !== path[i]));
+    (solution.length !== path.length || solution.some((v, i) => v !== path[i]));
   return Response.json({
     path,
     board: state.board,
@@ -100,8 +99,7 @@ export const POST: APIRoute = async ({ request }): Promise<Response> => {
   const isNovel =
     Array.isArray(solution) &&
     path.length > 0 &&
-    (solution.length !== path.length ||
-      solution.some((v, i) => v !== path[i]));
+    (solution.length !== path.length || solution.some((v, i) => v !== path[i]));
   return Response.json({
     path,
     board: state.board,
