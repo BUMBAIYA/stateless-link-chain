@@ -96,6 +96,23 @@ export interface PaintZipBoardOptions {
   highlightStartCell?: boolean;
 }
 
+const PATH_GRADIENT_START = "#f97316";
+const PATH_GRADIENT_END = "#9a3412";
+
+/** Interpolate between two hex colors; t in [0, 1]. */
+function lerpHex(hexStart: string, hexEnd: string, t: number): string {
+  const parse = (hex: string) => {
+    const n = parseInt(hex.slice(1), 16);
+    return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
+  };
+  const [r0, g0, b0] = parse(hexStart);
+  const [r1, g1, b1] = parse(hexEnd);
+  const r = Math.round(r0 + (r1 - r0) * t);
+  const g = Math.round(g0 + (g1 - g0) * t);
+  const b = Math.round(b0 + (b1 - b0) * t);
+  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+}
+
 /**
  * Paint the Zip board (background, cells, path, waypoints, border).
  * Caller must set canvas size and ctx.scale(dpr) before calling.
@@ -159,27 +176,39 @@ export function paintZipBoard(
 
   if (path.length > 0) {
     const pts = path.map((i) => center(i));
-    ctx.strokeStyle = "#ea580c";
-    ctx.fillStyle = "#ea580c";
-    ctx.lineWidth = cs * theme.pathWidthRatio;
+    const lw = cs * theme.pathWidthRatio;
+    ctx.lineWidth = lw;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < pts.length; i++) {
-      ctx.lineTo(pts[i].x, pts[i].y);
-    }
-    ctx.stroke();
     if (path.length === 1) {
+      ctx.fillStyle = PATH_GRADIENT_START;
       ctx.beginPath();
-      ctx.arc(
-        pts[0].x,
-        pts[0].y,
-        (cs * theme.pathWidthRatio) / 2,
-        0,
-        Math.PI * 2,
-      );
+      ctx.arc(pts[0].x, pts[0].y, lw / 2, 0, Math.PI * 2);
       ctx.fill();
+    } else {
+      // Subdivide each segment so color lerps smoothly along the path (stable as path grows)
+      const n = pts.length - 1;
+      const subdivisions = 16;
+      for (let i = 0; i < n; i++) {
+        const ax = pts[i].x;
+        const ay = pts[i].y;
+        const bx = pts[i + 1].x;
+        const by = pts[i + 1].y;
+        for (let j = 0; j < subdivisions; j++) {
+          const j0 = j / subdivisions;
+          const j1 = (j + 1) / subdivisions;
+          const progress = (i + (j + 0.5) / subdivisions) / n;
+          ctx.strokeStyle = lerpHex(
+            PATH_GRADIENT_START,
+            PATH_GRADIENT_END,
+            progress,
+          );
+          ctx.beginPath();
+          ctx.moveTo(ax + (bx - ax) * j0, ay + (by - ay) * j0);
+          ctx.lineTo(ax + (bx - ax) * j1, ay + (by - ay) * j1);
+          ctx.stroke();
+        }
+      }
     }
   }
 
