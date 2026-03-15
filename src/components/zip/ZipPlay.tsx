@@ -674,7 +674,11 @@ export const ZipPlay: Component = () => {
               Start game
             </button>
           </div>
-          <Show when={zipState() && zipState()!.players.length > 0}>
+          <Show
+            when={
+              alreadyPlayed() && zipState() && zipState()!.players.length > 0
+            }
+          >
             <div class="mt-6 w-full max-w-sm">
               <div class="mb-2 flex items-center justify-between">
                 <h2 class="text-sm font-medium text-zinc-600">Scoreboard</h2>
@@ -811,118 +815,120 @@ export const ZipPlay: Component = () => {
             <Show when={submitError()}>
               <p class="mt-2 text-sm text-red-600">{submitError()}</p>
             </Show>
-            <div class="mt-8 w-full max-w-sm">
-              <div class="mb-2 flex items-center justify-between">
-                <h2 class="text-sm font-medium text-zinc-600">Scoreboard</h2>
-                <Show
-                  when={
-                    zipState()?.solution &&
-                    Array.isArray(zipState()!.solution) &&
-                    zipState()!.solution!.length > 0
-                  }
-                >
-                  <button
-                    type="button"
-                    onClick={openCreatorSolutionViewer}
-                    class="text-sm text-emerald-600 hover:underline"
+            <Show when={alreadyPlayed()}>
+              <div class="mt-8 w-full max-w-sm">
+                <div class="mb-2 flex items-center justify-between">
+                  <h2 class="text-sm font-medium text-zinc-600">Scoreboard</h2>
+                  <Show
+                    when={
+                      zipState()?.solution &&
+                      Array.isArray(zipState()!.solution) &&
+                      zipState()!.solution!.length > 0
+                    }
                   >
-                    View actual solution
-                  </button>
+                    <button
+                      type="button"
+                      onClick={openCreatorSolutionViewer}
+                      class="text-sm text-emerald-600 hover:underline"
+                    >
+                      View actual solution
+                    </button>
+                  </Show>
+                </div>
+                <ul class="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+                  <Show
+                    when={zipState()!.players.length > 0}
+                    fallback={
+                      <li class="py-2 text-sm text-zinc-500">
+                        No scores yet. Be the first!
+                      </li>
+                    }
+                  >
+                    <For
+                      each={[...zipState()!.players].sort(
+                        (a, b) => a.score - b.score,
+                      )}
+                    >
+                      {(p, i) => (
+                        <li class="flex flex-wrap items-center justify-between gap-x-2 border-b border-zinc-100 py-2 text-sm last:border-0">
+                          <span>
+                            {i() + 1}. {p.name}
+                          </span>
+                          <span class="flex items-center gap-2">
+                            {p.isNovel && (
+                              <span
+                                class="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800"
+                                title="Different solution from creator"
+                              >
+                                Novel
+                              </span>
+                            )}
+                            <span class="text-zinc-500">
+                              {p.score} moves, {Math.round(p.time / 1000)}s
+                            </span>
+                            <Show when={p.userId}>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  openSolutionViewer(p.name, p.userId!)
+                                }
+                                class="text-emerald-600 hover:underline"
+                              >
+                                View
+                              </button>
+                            </Show>
+                          </span>
+                        </li>
+                      )}
+                    </For>
+                  </Show>
+                </ul>
+                <Show when={viewingCreatorSolution() && creatorSolutionData()}>
+                  <div class="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+                    <p class="mb-2 text-xs font-medium text-zinc-600">
+                      Creator's solution
+                    </p>
+                    <SolutionGrid data={creatorSolutionData()!} />
+                    <button
+                      type="button"
+                      onClick={closeSolutionViewer}
+                      class="mt-2 text-xs text-zinc-500 hover:underline"
+                    >
+                      Close
+                    </button>
+                  </div>
                 </Show>
-              </div>
-              <ul class="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-                <Show
-                  when={zipState()!.players.length > 0}
-                  fallback={
-                    <li class="py-2 text-sm text-zinc-500">
-                      No scores yet. Be the first!
-                    </li>
-                  }
-                >
-                  <For
-                    each={[...zipState()!.players].sort(
-                      (a, b) => a.score - b.score,
-                    )}
-                  >
-                    {(p, i) => (
-                      <li class="flex flex-wrap items-center justify-between gap-x-2 border-b border-zinc-100 py-2 text-sm last:border-0">
-                        <span>
-                          {i() + 1}. {p.name}
-                        </span>
-                        <span class="flex items-center gap-2">
-                          {p.isNovel && (
-                            <span
-                              class="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800"
-                              title="Different solution from creator"
-                            >
+                <Show when={viewingPlayer()}>
+                  <div class="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+                    <p class="mb-2 text-xs font-medium text-zinc-600">
+                      {viewingPlayer()!.name}'s solution
+                    </p>
+                    <Show when={solutionLoading()}>
+                      <p class="text-xs text-zinc-500">Loading…</p>
+                    </Show>
+                    <Show when={!solutionLoading() && solutionData()}>
+                      {(sd) => (
+                        <>
+                          {sd().isNovel && (
+                            <span class="mb-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
                               Novel
                             </span>
                           )}
-                          <span class="text-zinc-500">
-                            {p.score} moves, {Math.round(p.time / 1000)}s
-                          </span>
-                          <Show when={p.userId}>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                openSolutionViewer(p.name, p.userId!)
-                              }
-                              class="text-emerald-600 hover:underline"
-                            >
-                              View
-                            </button>
-                          </Show>
-                        </span>
-                      </li>
-                    )}
-                  </For>
+                          <SolutionGrid data={sd()} />
+                        </>
+                      )}
+                    </Show>
+                    <button
+                      type="button"
+                      onClick={closeSolutionViewer}
+                      class="mt-2 text-xs text-zinc-500 hover:underline"
+                    >
+                      Close
+                    </button>
+                  </div>
                 </Show>
-              </ul>
-              <Show when={viewingCreatorSolution() && creatorSolutionData()}>
-                <div class="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
-                  <p class="mb-2 text-xs font-medium text-zinc-600">
-                    Creator's solution
-                  </p>
-                  <SolutionGrid data={creatorSolutionData()!} />
-                  <button
-                    type="button"
-                    onClick={closeSolutionViewer}
-                    class="mt-2 text-xs text-zinc-500 hover:underline"
-                  >
-                    Close
-                  </button>
-                </div>
-              </Show>
-              <Show when={viewingPlayer()}>
-                <div class="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
-                  <p class="mb-2 text-xs font-medium text-zinc-600">
-                    {viewingPlayer()!.name}'s solution
-                  </p>
-                  <Show when={solutionLoading()}>
-                    <p class="text-xs text-zinc-500">Loading…</p>
-                  </Show>
-                  <Show when={!solutionLoading() && solutionData()}>
-                    {(sd) => (
-                      <>
-                        {sd().isNovel && (
-                          <span class="mb-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
-                            Novel
-                          </span>
-                        )}
-                        <SolutionGrid data={sd()} />
-                      </>
-                    )}
-                  </Show>
-                  <button
-                    type="button"
-                    onClick={closeSolutionViewer}
-                    class="mt-2 text-xs text-zinc-500 hover:underline"
-                  >
-                    Close
-                  </button>
-                </div>
-              </Show>
-            </div>
+              </div>
+            </Show>
             <Show when={justSolved() && newChain()}>
               <div class="mt-8 w-full max-w-sm rounded-lg border border-emerald-200 bg-emerald-50/80 p-4">
                 <h2 class="mb-1 text-lg font-semibold text-green-700">
