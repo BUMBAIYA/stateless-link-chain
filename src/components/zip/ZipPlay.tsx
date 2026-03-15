@@ -10,27 +10,12 @@ import { nanoid } from "nanoid";
 
 import { ZipGameCanvas } from "@/components/zip/ZipGameCanvas";
 import {
-  BLOCKED,
-  GRID_SIZE_MAX,
-  GRID_SIZE_MIN,
-  type GridSize,
-} from "@/lib/zip/validate";
-
-const SOLUTION_GRID_GAP = 0;
-const SOLUTION_GRID_PAD = 0;
-const SOLUTION_BOARD_RADIUS = 8;
-const SOLUTION_GRID_LINE_WIDTH = 1.5;
-const SOLUTION_BOARD_BORDER_WIDTH = 2;
-const SOLUTION_GRID_STROKE_STYLE = "#a1a1aa";
-const SOLUTION_PATH_WIDTH_RATIO = 0.58;
-const SOLUTION_WAYPOINT_RADIUS_RATIO = 0.38;
-
-function solutionCellSize(size: number): number {
-  if (size >= GRID_SIZE_MIN && size <= GRID_SIZE_MAX) {
-    return Math.round(44 - (size - 4) * 4);
-  }
-  return 28;
-}
+  zipBoardLogicalSize,
+  ZIP_BOARD_SOLUTION_THEME,
+  paintZipBoard,
+  zipBoardSolutionCellSize,
+} from "@/lib/zip/board-canvas";
+import type { GridSize } from "@/lib/zip/validate";
 
 const ZIP_USER_ID_COOKIE = "p_id";
 const ZIP_USER_ID_MAX_AGE = 365 * 24 * 60 * 60;
@@ -90,10 +75,10 @@ function SolutionGrid(props: { data: SolutionData }) {
     if (!canvasEl) return;
     const d = props.data;
     const path = d.path;
-    const s = d.gridSize ?? 7;
+    const s = (d.gridSize ?? 7) as number;
     const b = d.board ?? [];
-    const cs = solutionCellSize(s as GridSize);
-    const totalW = SOLUTION_GRID_PAD * 2 + s * cs + (s - 1) * SOLUTION_GRID_GAP;
+    const theme = ZIP_BOARD_SOLUTION_THEME;
+    const totalW = zipBoardLogicalSize(s, theme, zipBoardSolutionCellSize);
     const totalH = totalW;
     const dpr =
       typeof window !== "undefined"
@@ -109,90 +94,9 @@ function SolutionGrid(props: { data: SolutionData }) {
     if (!ctx) return;
     ctx.scale(dpr, dpr);
 
-    const center = (index: number) => {
-      const r = Math.floor(index / s);
-      const c = index % s;
-      return {
-        x: SOLUTION_GRID_PAD + c * (cs + SOLUTION_GRID_GAP) + cs / 2,
-        y: SOLUTION_GRID_PAD + r * (cs + SOLUTION_GRID_GAP) + cs / 2,
-      };
-    };
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.roundRect(0, 0, totalW, totalH, SOLUTION_BOARD_RADIUS);
-    ctx.clip();
-
-    ctx.fillStyle = "#f4f4f5";
-    ctx.fillRect(0, 0, totalW, totalH);
-
-    for (let i = 0; i < s * s; i++) {
-      const r = Math.floor(i / s);
-      const c = i % s;
-      const x = SOLUTION_GRID_PAD + c * (cs + SOLUTION_GRID_GAP);
-      const y = SOLUTION_GRID_PAD + r * (cs + SOLUTION_GRID_GAP);
-      if (b[i] === BLOCKED) {
-        ctx.fillStyle = "#3f3f46";
-        ctx.fillRect(x, y, cs, cs);
-      } else {
-        ctx.fillStyle = "#fff";
-        ctx.fillRect(x, y, cs, cs);
-        ctx.strokeStyle = SOLUTION_GRID_STROKE_STYLE;
-        ctx.lineWidth = SOLUTION_GRID_LINE_WIDTH;
-        ctx.strokeRect(x, y, cs, cs);
-      }
-    }
-
-    if (path.length > 0) {
-      const pts = path.map((idx) => center(idx));
-      ctx.strokeStyle = "#ea580c";
-      ctx.fillStyle = "#ea580c";
-      ctx.lineWidth = cs * SOLUTION_PATH_WIDTH_RATIO;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.beginPath();
-      ctx.moveTo(pts[0].x, pts[0].y);
-      for (let i = 1; i < pts.length; i++) {
-        ctx.lineTo(pts[i].x, pts[i].y);
-      }
-      ctx.stroke();
-      if (path.length === 1) {
-        ctx.beginPath();
-        ctx.arc(
-          pts[0].x,
-          pts[0].y,
-          (cs * SOLUTION_PATH_WIDTH_RATIO) / 2,
-          0,
-          Math.PI * 2,
-        );
-        ctx.fill();
-      }
-    }
-
-    for (let i = 0; i < s * s; i++) {
-      const val = b[i];
-      if (typeof val !== "number" || val <= 0) continue;
-      const { x, y } = center(i);
-      const rad = cs * SOLUTION_WAYPOINT_RADIUS_RATIO;
-      ctx.fillStyle = "#18181b";
-      ctx.beginPath();
-      ctx.arc(x, y, rad, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#fff";
-      ctx.font = `bold ${Math.round(rad * 1.1)}px system-ui, sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(String(val), x, y);
-    }
-
-    ctx.restore();
-
-    ctx.strokeStyle = SOLUTION_GRID_STROKE_STYLE;
-    ctx.lineWidth = SOLUTION_BOARD_BORDER_WIDTH;
-    ctx.beginPath();
-    ctx.roundRect(0, 0, totalW, totalH, SOLUTION_BOARD_RADIUS);
-    ctx.stroke();
-
+    paintZipBoard(ctx, s, b, path, theme, {
+      getCellSize: zipBoardSolutionCellSize,
+    });
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   };
 

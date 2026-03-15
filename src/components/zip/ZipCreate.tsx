@@ -9,35 +9,24 @@ import {
 } from "solid-js";
 
 import {
-  GRID_SIZE_MAX,
-  GRID_SIZE_MIN,
-  type GridSize,
-} from "@/lib/zip/validate";
+  zipBoardGetCellFromPoint,
+  zipBoardLogicalSize,
+  ZIP_BOARD_DEFAULT_THEME,
+  paintZipBoard,
+  zipBoardCellSize,
+} from "@/lib/zip/board-canvas";
 import {
   BLOCKED,
+  GRID_SIZE_MAX,
+  GRID_SIZE_MIN,
   pathCellCount,
   validatePathOnly,
   validateZipBoard,
   validateZipSolution,
+  type GridSize,
 } from "@/lib/zip/validate";
 
-const GAP = 0;
-const PAD = 0;
-const BOARD_RADIUS = 12;
-const GRID_LINE_WIDTH = 2;
-const BOARD_BORDER_WIDTH = 3;
-const GRID_STROKE_STYLE = "#a1a1aa";
-const PATH_WIDTH_RATIO = 0.58;
-const WAYPOINT_RADIUS_RATIO = 0.38;
-
 const GRID_SIZE_OPTIONS = [4, 5, 6, 7, 8] as const;
-
-function cellSizeFor(s: number): number {
-  if (s >= GRID_SIZE_MIN && s <= GRID_SIZE_MAX) {
-    return Math.round(72 - (s - 4) * 8);
-  }
-  return 44;
-}
 
 type CreateMode = "path" | "waypoints";
 
@@ -223,23 +212,17 @@ export const ZipCreate: Component = () => {
   };
   const pathDragState = { lastProcessed: -1, active: false };
 
-  const logicalSize = () => {
-    const s = size();
-    const cs = cellSizeFor(s);
-    return PAD * 2 + s * cs + (s - 1) * GAP;
-  };
+  const logicalSize = () =>
+    zipBoardLogicalSize(size(), ZIP_BOARD_DEFAULT_THEME, zipBoardCellSize);
 
-  const getCellFromPoint = (
-    canvasX: number,
-    canvasY: number,
-  ): number | null => {
-    const s = size();
-    const cs = cellSizeFor(s);
-    const row = Math.floor((canvasY - PAD) / (cs + GAP));
-    const col = Math.floor((canvasX - PAD) / (cs + GAP));
-    if (row < 0 || row >= s || col < 0 || col >= s) return null;
-    return row * s + col;
-  };
+  const getCellFromPoint = (canvasX: number, canvasY: number): number | null =>
+    zipBoardGetCellFromPoint(
+      canvasX,
+      canvasY,
+      size(),
+      ZIP_BOARD_DEFAULT_THEME,
+      zipBoardCellSize,
+    );
 
   const clientToLogical = (clientX: number, clientY: number) => {
     if (!canvasEl) return { x: 0, y: 0 };
@@ -256,13 +239,13 @@ export const ZipCreate: Component = () => {
     const s = size();
     const b = board();
     const p = solutionPath();
-    const cs = cellSizeFor(s);
+    const theme = ZIP_BOARD_DEFAULT_THEME;
+    const totalW = zipBoardLogicalSize(s, theme, zipBoardCellSize);
+    const totalH = totalW;
     const dpr =
       typeof window !== "undefined"
         ? Math.min(2, window.devicePixelRatio ?? 1)
         : 1;
-    const totalW = logicalSize();
-    const totalH = totalW;
 
     canvasEl.width = totalW * dpr;
     canvasEl.height = totalH * dpr;
@@ -273,91 +256,7 @@ export const ZipCreate: Component = () => {
     if (!ctx) return;
     ctx.scale(dpr, dpr);
 
-    const center = (index: number) => {
-      const r = Math.floor(index / s);
-      const c = index % s;
-      return {
-        x: PAD + c * (cs + GAP) + cs / 2,
-        y: PAD + r * (cs + GAP) + cs / 2,
-      };
-    };
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.roundRect(0, 0, totalW, totalH, BOARD_RADIUS);
-    ctx.clip();
-
-    ctx.fillStyle = "#f4f4f5";
-    ctx.fillRect(0, 0, totalW, totalH);
-
-    for (let i = 0; i < s * s; i++) {
-      const r = Math.floor(i / s);
-      const c = i % s;
-      const x = PAD + c * (cs + GAP);
-      const y = PAD + r * (cs + GAP);
-      const cellVal = b[i];
-      if (cellVal === BLOCKED) {
-        ctx.fillStyle = "#3f3f46";
-        ctx.fillRect(x, y, cs, cs);
-      } else {
-        ctx.fillStyle = "#fff";
-        ctx.fillRect(x, y, cs, cs);
-        ctx.strokeStyle = GRID_STROKE_STYLE;
-        ctx.lineWidth = GRID_LINE_WIDTH;
-        ctx.strokeRect(x, y, cs, cs);
-      }
-    }
-
-    if (p.length > 0) {
-      const pts = p.map((i) => center(i));
-      ctx.strokeStyle = "#ea580c";
-      ctx.fillStyle = "#ea580c";
-      ctx.lineWidth = cs * PATH_WIDTH_RATIO;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.beginPath();
-      ctx.moveTo(pts[0].x, pts[0].y);
-      for (let i = 1; i < pts.length; i++) {
-        ctx.lineTo(pts[i].x, pts[i].y);
-      }
-      ctx.stroke();
-      if (p.length === 1) {
-        ctx.beginPath();
-        ctx.arc(
-          pts[0].x,
-          pts[0].y,
-          (cs * PATH_WIDTH_RATIO) / 2,
-          0,
-          Math.PI * 2,
-        );
-        ctx.fill();
-      }
-    }
-
-    for (let i = 0; i < s * s; i++) {
-      const val = b[i];
-      if (typeof val !== "number" || val <= 0) continue;
-      const { x, y } = center(i);
-      const rad = cs * WAYPOINT_RADIUS_RATIO;
-      ctx.fillStyle = "#18181b";
-      ctx.beginPath();
-      ctx.arc(x, y, rad, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#fff";
-      ctx.font = `bold ${Math.round(rad * 1.1)}px system-ui, sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(String(val), x, y);
-    }
-
-    ctx.restore();
-
-    ctx.strokeStyle = GRID_STROKE_STYLE;
-    ctx.lineWidth = BOARD_BORDER_WIDTH;
-    ctx.beginPath();
-    ctx.roundRect(0, 0, totalW, totalH, BOARD_RADIUS);
-    ctx.stroke();
-
+    paintZipBoard(ctx, s, b, p, theme);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   };
 

@@ -7,35 +7,24 @@ import {
 } from "solid-js";
 
 import {
+  zipBoardGetCellFromPoint,
+  zipBoardLogicalSize,
+  ZIP_BOARD_DEFAULT_THEME,
+  paintZipBoard,
+  zipBoardCellSize,
+} from "@/lib/zip/board-canvas";
+import {
   BLOCKED,
-  GRID_SIZE_MAX,
-  GRID_SIZE_MIN,
   pathCellCount,
   validateZipSolution,
   type GridSize,
 } from "@/lib/zip/validate";
-
-const GAP = 0;
-const PAD = 0;
-const BOARD_RADIUS = 12;
-const GRID_LINE_WIDTH = 2;
-const BOARD_BORDER_WIDTH = 3;
-const GRID_STROKE_STYLE = "#a1a1aa";
-const PATH_WIDTH_RATIO = 0.58;
-const WAYPOINT_RADIUS_RATIO = 0.38;
 
 interface ZipGameCanvasProps {
   gridSize: GridSize;
   board: number[];
   waypointCount: number;
   onSolve: (timeMs: number, moves: number, path: number[]) => void;
-}
-
-function cellSizeFor(size: number): number {
-  if (size >= GRID_SIZE_MIN && size <= GRID_SIZE_MAX) {
-    return Math.round(72 - (size - 4) * 8);
-  }
-  return 44;
 }
 
 export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
@@ -144,29 +133,27 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
     return true;
   };
 
-  const getCellFromPoint = (
-    canvasX: number,
-    canvasY: number,
-  ): number | null => {
-    const cs = cellSizeFor(size());
-    const row = Math.floor((canvasY - PAD) / (cs + GAP));
-    const col = Math.floor((canvasX - PAD) / (cs + GAP));
-    if (row < 0 || row >= size() || col < 0 || col >= size()) return null;
-    return row * size() + col;
-  };
+  const getCellFromPoint = (canvasX: number, canvasY: number): number | null =>
+    zipBoardGetCellFromPoint(
+      canvasX,
+      canvasY,
+      size(),
+      ZIP_BOARD_DEFAULT_THEME,
+      zipBoardCellSize,
+    );
 
   const paint = () => {
     if (!canvasEl) return;
     const s = size();
     const b = board();
     const p = path();
-    const cs = cellSizeFor(s);
+    const theme = ZIP_BOARD_DEFAULT_THEME;
+    const totalW = zipBoardLogicalSize(s, theme, zipBoardCellSize);
+    const totalH = totalW;
     const dpr =
       typeof window !== "undefined"
         ? Math.min(2, window.devicePixelRatio ?? 1)
         : 1;
-    const totalW = PAD * 2 + s * cs + (s - 1) * GAP;
-    const totalH = totalW;
 
     canvasEl.width = totalW * dpr;
     canvasEl.height = totalH * dpr;
@@ -177,103 +164,7 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
     if (!ctx) return;
     ctx.scale(dpr, dpr);
 
-    const center = (index: number) => {
-      const r = Math.floor(index / s);
-      const c = index % s;
-      return {
-        x: PAD + c * (cs + GAP) + cs / 2,
-        y: PAD + r * (cs + GAP) + cs / 2,
-      };
-    };
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.roundRect(0, 0, totalW, totalH, BOARD_RADIUS);
-    ctx.clip();
-
-    ctx.fillStyle = "#f4f4f5";
-    ctx.fillRect(0, 0, totalW, totalH);
-
-    for (let i = 0; i < s * s; i++) {
-      const r = Math.floor(i / s);
-      const c = i % s;
-      const x = PAD + c * (cs + GAP);
-      const y = PAD + r * (cs + GAP);
-      if (b[i] === BLOCKED) {
-        ctx.fillStyle = "#3f3f46";
-        ctx.fillRect(x, y, cs, cs);
-      } else {
-        ctx.fillStyle = "#fff";
-        ctx.fillRect(x, y, cs, cs);
-        ctx.strokeStyle = GRID_STROKE_STYLE;
-        ctx.lineWidth = GRID_LINE_WIDTH;
-        ctx.strokeRect(x, y, cs, cs);
-      }
-    }
-
-    if (p.length === 1) {
-      const startIdx = p[0];
-      const r = Math.floor(startIdx / s);
-      const c = startIdx % s;
-      const x = PAD + c * (cs + GAP);
-      const y = PAD + r * (cs + GAP);
-      ctx.fillStyle = "#ffedd5";
-      ctx.fillRect(x, y, cs, cs);
-      ctx.strokeStyle = GRID_STROKE_STYLE;
-      ctx.lineWidth = GRID_LINE_WIDTH;
-      ctx.strokeRect(x, y, cs, cs);
-    }
-
-    if (p.length > 0) {
-      const pts = p.map((i) => center(i));
-      ctx.strokeStyle = "#ea580c";
-      ctx.fillStyle = "#ea580c";
-      ctx.lineWidth = cs * PATH_WIDTH_RATIO;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.beginPath();
-      ctx.moveTo(pts[0].x, pts[0].y);
-      for (let i = 1; i < pts.length; i++) {
-        ctx.lineTo(pts[i].x, pts[i].y);
-      }
-      ctx.stroke();
-      if (p.length === 1) {
-        ctx.beginPath();
-        ctx.arc(
-          pts[0].x,
-          pts[0].y,
-          (cs * PATH_WIDTH_RATIO) / 2,
-          0,
-          Math.PI * 2,
-        );
-        ctx.fill();
-      }
-    }
-
-    for (let i = 0; i < s * s; i++) {
-      const val = b[i];
-      if (typeof val !== "number" || val <= 0) continue;
-      const { x, y } = center(i);
-      const rad = cs * WAYPOINT_RADIUS_RATIO;
-      ctx.fillStyle = "#18181b";
-      ctx.beginPath();
-      ctx.arc(x, y, rad, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#fff";
-      ctx.font = `bold ${Math.round(rad * 1.1)}px system-ui, sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(String(val), x, y);
-    }
-
-    ctx.restore();
-
-    ctx.strokeStyle = GRID_STROKE_STYLE;
-    ctx.lineWidth = BOARD_BORDER_WIDTH;
-    ctx.beginPath();
-    ctx.roundRect(0, 0, totalW, totalH, BOARD_RADIUS);
-    ctx.stroke();
-
+    paintZipBoard(ctx, s, b, p, theme, { highlightStartCell: true });
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   };
 
@@ -303,11 +194,8 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
-  const logicalSize = () => {
-    const s = size();
-    const cs = cellSizeFor(s);
-    return PAD * 2 + s * cs + (s - 1) * GAP;
-  };
+  const logicalSize = () =>
+    zipBoardLogicalSize(size(), ZIP_BOARD_DEFAULT_THEME, zipBoardCellSize);
 
   const clientToLogical = (clientX: number, clientY: number) => {
     if (!canvasEl) return { x: 0, y: 0 };
