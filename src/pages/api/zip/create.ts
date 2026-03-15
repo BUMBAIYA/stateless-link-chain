@@ -13,7 +13,7 @@ import { validateZipBoard, validateZipSolution } from "@/lib/zip/validate";
 
 /**
  * Create a new zip game chain. Board: -1=blocked, 0=empty path, 1..waypointCount=waypoints.
- * Body: { gridSize: 4..8, board: number[], waypointCount: number, solution?: number[] }
+ * Body: { gridSize: 4..8, board: number[], waypointCount: number, solution?: number[], creatorId?: string }
  */
 export const POST: APIRoute = async ({ request }): Promise<Response> => {
   let body: {
@@ -21,6 +21,7 @@ export const POST: APIRoute = async ({ request }): Promise<Response> => {
     board?: number[];
     waypointCount?: number;
     solution?: number[];
+    creatorId?: string;
   };
   try {
     body = await request.json();
@@ -28,7 +29,9 @@ export const POST: APIRoute = async ({ request }): Promise<Response> => {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { gridSize, board, waypointCount, solution } = body;
+  const { gridSize, board, waypointCount, solution, creatorId } = body;
+  const gameSeed = Math.floor(Math.random() * 0xffff_ffff);
+  const gradientSeed = `${typeof creatorId === "string" && creatorId ? creatorId : "anon"}\0${gameSeed}`;
   if (!isValidGridSize(gridSize)) {
     return Response.json(
       { error: `gridSize must be ${GRID_SIZE_MIN} to ${GRID_SIZE_MAX}` },
@@ -62,7 +65,7 @@ export const POST: APIRoute = async ({ request }): Promise<Response> => {
   }
 
   const state = {
-    seed: 0,
+    seed: gameSeed,
     players: [],
     maxPlayers: 999,
     gameType: "zip" as const,
@@ -71,6 +74,7 @@ export const POST: APIRoute = async ({ request }): Promise<Response> => {
     board,
     solution: solutionPath,
     createdAt: Date.now(),
+    gradientSeed,
   };
 
   const payload = encode(state);

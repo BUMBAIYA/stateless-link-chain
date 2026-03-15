@@ -8,6 +8,7 @@ import {
   type Component,
 } from "solid-js";
 
+import { CopyButton } from "@/components/CopyButton";
 import {
   zipBoardGetCellFromPoint,
   zipBoardLogicalSize,
@@ -15,6 +16,8 @@ import {
   paintZipBoard,
   zipBoardCellSize,
 } from "@/lib/zip/board-canvas";
+import { decodeGameSeed, encodeGameSeed } from "@/lib/zip/game-seed";
+import { getZipUserId } from "@/lib/zip/user-id";
 import {
   BLOCKED,
   GRID_SIZE_MAX,
@@ -39,6 +42,8 @@ export const ZipCreate: Component = () => {
   const [loading, setLoading] = createSignal(false);
   const [link, setLink] = createSignal<string | null>(null);
   const [error, setError] = createSignal<string | null>(null);
+  const [importSeedInput, setImportSeedInput] = createSignal("");
+  const [importError, setImportError] = createSignal<string | null>(null);
 
   const size = () => gridSize();
   const total = () => size() * size();
@@ -184,6 +189,7 @@ export const ZipCreate: Component = () => {
           board: board(),
           waypointCount: waypointCount(),
           solution: solutionPath(),
+          creatorId: getZipUserId(),
         }),
       });
       const data = await res.json();
@@ -196,14 +202,43 @@ export const ZipCreate: Component = () => {
     }
   };
 
-  const copyLink = () => {
+  /** Current puzzle as shareable game seed (same game can be recreated from this after expiry). */
+  const currentGameSeed = (): string | null => {
+    if (!canCreate()) return null;
+    return encodeGameSeed({
+      gridSize: size(),
+      board: board(),
+      waypointCount: waypointCount(),
+      solution: solutionPath(),
+    });
+  };
+
+  const loadFromSeed = () => {
+    const raw = importSeedInput().trim();
+    setImportError(null);
+    const data = decodeGameSeed(raw);
+    if (!data) {
+      setImportError(
+        "Invalid game seed. Paste a seed shared from Create or Play.",
+      );
+      return;
+    }
+    setGridSize(data.gridSize as GridSize);
+    setBoard([...data.board]);
+    setSolutionPath([...data.solution]);
+    setNextWaypoint(data.waypointCount + 1);
+    setMode("waypoints");
+    setLink(null);
+    setError(null);
+    setImportSeedInput("");
+  };
+
+  const linkCopyText = () => {
     const l = link();
-    if (!l) return;
-    const url =
-      typeof window !== "undefined"
-        ? new URL(l, window.location.origin).href
-        : l;
-    navigator.clipboard?.writeText(url);
+    if (!l) return "";
+    return typeof window !== "undefined"
+      ? new URL(l, window.location.origin).href
+      : l;
   };
 
   let canvasEl: HTMLCanvasElement | null = null;
@@ -327,6 +362,34 @@ export const ZipCreate: Component = () => {
           you like.
         </p>
 
+        <div class="mb-4 rounded-lg border border-zinc-200 bg-zinc-50/80 p-3">
+          <p class="mb-1 text-xs font-medium text-zinc-600">
+            Import game seed (recreate a puzzle after expiry)
+          </p>
+          <div class="flex gap-2">
+            <input
+              type="text"
+              placeholder="Paste game seed from Create or Play…"
+              value={importSeedInput()}
+              onInput={(e) => {
+                setImportSeedInput(e.currentTarget.value);
+                setImportError(null);
+              }}
+              class="min-w-0 flex-1 rounded border border-zinc-300 bg-white px-2 py-1.5 text-xs ring-1 focus:border-emerald-500 focus:ring-emerald-500 focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={loadFromSeed}
+              class="shrink-0 rounded bg-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-300"
+            >
+              Load
+            </button>
+          </div>
+          {importError() && (
+            <p class="mt-1 text-xs text-red-600">{importError()}</p>
+          )}
+        </div>
+
         <div class="mb-4 flex flex-wrap gap-2">
           <For each={GRID_SIZE_OPTIONS}>
             {(n) => (
@@ -436,13 +499,7 @@ export const ZipCreate: Component = () => {
                 <code class="flex-1 truncate rounded bg-zinc-100 px-2 py-1 text-xs text-emerald-800">
                   {link()}
                 </code>
-                <button
-                  type="button"
-                  onClick={copyLink}
-                  class="shrink-0 rounded bg-zinc-200 px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-300"
-                >
-                  Copy
-                </button>
+                <CopyButton text={linkCopyText()} />
               </div>
               <a
                 href={link() ?? "#"}
@@ -450,6 +507,20 @@ export const ZipCreate: Component = () => {
               >
                 Open game →
               </a>
+            </div>
+          </Show>
+          <Show when={currentGameSeed()}>
+            <div class="rounded-lg border border-zinc-200 bg-white p-3">
+              <p class="mb-1 text-xs text-zinc-500">
+                Game seed — share this to recreate the same puzzle after the
+                link expires:
+              </p>
+              <div class="flex gap-2">
+                <code class="flex-1 truncate rounded bg-zinc-100 px-2 py-1 text-xs text-zinc-800">
+                  {currentGameSeed()}
+                </code>
+                <CopyButton text={currentGameSeed() ?? ""} label="Copy seed" />
+              </div>
             </div>
           </Show>
           {error() && <p class="text-sm text-red-600">{error()}</p>}

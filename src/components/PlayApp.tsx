@@ -15,7 +15,6 @@ const PlayApp: Component = () => {
   const [scoreState, setScoreState] = createSignal<ScoreState | null>(null);
   const [createLoading, setCreateLoading] = createSignal(false);
   const [createLink, setCreateLink] = createSignal<string | null>(null);
-  const [copyFeedback, setCopyFeedback] = createSignal(false);
   const [addPlayerSubmitting, setAddPlayerSubmitting] = createSignal(false);
   const [addPlayerError, setAddPlayerError] = createSignal<string | null>(null);
   const [stateError, setStateError] = createSignal<string | null>(null);
@@ -65,16 +64,12 @@ const PlayApp: Component = () => {
     }
   };
 
-  const handleCopy = () => {
+  const createCopyText = () => {
     const link = createLink();
-    if (!link) return;
-    const url =
-      typeof window !== "undefined"
-        ? new URL(link, window.location.origin).href
-        : link;
-    navigator.clipboard?.writeText(url);
-    setCopyFeedback(true);
-    setTimeout(() => setCopyFeedback(false), 1500);
+    if (!link) return "";
+    return typeof window !== "undefined"
+      ? new URL(link, window.location.origin).href
+      : link;
   };
 
   const handleAddPlayer = async (opts: {
@@ -132,8 +127,7 @@ const PlayApp: Component = () => {
           loading={createLoading()}
           link={createLink}
           onCreate={handleCreate}
-          onCopy={handleCopy}
-          copyFeedback={copyFeedback}
+          copyText={createCopyText}
         />
 
         <AddPlayerForm

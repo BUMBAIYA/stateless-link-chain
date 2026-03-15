@@ -6,8 +6,7 @@ import {
   Show,
   type Component,
 } from "solid-js";
-import { nanoid } from "nanoid";
-
+import { CopyButton } from "@/components/CopyButton";
 import { ZipGameCanvas } from "@/components/zip/ZipGameCanvas";
 import {
   zipBoardLogicalSize,
@@ -15,30 +14,9 @@ import {
   paintZipBoard,
   zipBoardSolutionCellSize,
 } from "@/lib/zip/board-canvas";
+import { encodeGameSeed } from "@/lib/zip/game-seed";
+import { getZipUserId } from "@/lib/zip/user-id";
 import type { GridSize } from "@/lib/zip/validate";
-
-const ZIP_USER_ID_COOKIE = "p_id";
-const ZIP_USER_ID_MAX_AGE = 365 * 24 * 60 * 60;
-
-function getZipUserId(): string {
-  if (typeof document === "undefined") return nanoid();
-  const row = document.cookie
-    .split("; ")
-    .find((r) => r.startsWith(ZIP_USER_ID_COOKIE + "="));
-  const existing = row
-    ? decodeURIComponent(row.slice(ZIP_USER_ID_COOKIE.length + 1))
-    : "";
-  if (existing.length > 0) return existing;
-  const id = nanoid();
-  document.cookie =
-    ZIP_USER_ID_COOKIE +
-    "=" +
-    encodeURIComponent(id) +
-    "; path=/; max-age=" +
-    ZIP_USER_ID_MAX_AGE +
-    "; SameSite=Lax";
-  return id;
-}
 
 interface ZipPlayer {
   name: string;
@@ -54,6 +32,8 @@ interface SolutionData {
   gridSize: GridSize;
   name: string;
   isNovel: boolean;
+  /** Path gradient seed from chain (same for all users in a game) */
+  gradientSeed?: string;
 }
 
 interface ZipState {
@@ -65,6 +45,8 @@ interface ZipState {
   players: ZipPlayer[];
   createdAt: number;
   expired: boolean;
+  /** Path gradient seed from chain (creatorId + game seed), same for all users */
+  gradientSeed?: string;
 }
 
 /** Renders the solution as a canvas: board + path line through cells + waypoint numbers (same as game). */
@@ -96,6 +78,7 @@ function SolutionGrid(props: { data: SolutionData }) {
 
     paintZipBoard(ctx, s, b, path, theme, {
       getCellSize: zipBoardSolutionCellSize,
+      gradientSeed: d.gradientSeed,
     });
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   };
@@ -179,6 +162,8 @@ export const ZipPlay: Component = () => {
         })),
         createdAt: data.createdAt,
         expired: data.expired === true,
+        gradientSeed:
+          typeof data.gradientSeed === "string" ? data.gradientSeed : undefined,
       });
       setYourSolutionData(null);
       setYourSolutionLoading(false);
@@ -287,6 +272,7 @@ export const ZipPlay: Component = () => {
         gridSize: data.gridSize ?? 7,
         name: data.name ?? name,
         isNovel: data.isNovel === true,
+        gradientSeed: state.gradientSeed,
       });
     } catch {
       setSolutionData(null);
@@ -310,6 +296,25 @@ export const ZipPlay: Component = () => {
     setSolutionData(null);
   };
 
+  /** Game seed to recreate this puzzle (for sharing after expiry). */
+  const playPageGameSeed = (): string | null => {
+    const s = zipState();
+    if (
+      !s?.board?.length ||
+      !Array.isArray(s.solution) ||
+      s.solution.length === 0
+    )
+      return null;
+    const w = s.waypointCount ?? 0;
+    if (w < 1) return null;
+    return encodeGameSeed({
+      gridSize: s.gridSize,
+      board: s.board,
+      waypointCount: w,
+      solution: s.solution,
+    });
+  };
+
   /** Creator solution for the viewer (from current state). */
   const creatorSolutionData = (): SolutionData | null => {
     const state = zipState();
@@ -320,21 +325,20 @@ export const ZipPlay: Component = () => {
       gridSize: state.gridSize ?? 7,
       name: "Creator",
       isNovel: false,
+      gradientSeed: state.gradientSeed,
     };
   };
 
-  const copyShareLink = () => {
+  const shareLinkCopyText = () => {
     const chain = newChain();
-    if (!chain) return;
+    if (!chain) return "";
     const path =
       typeof window !== "undefined"
         ? window.location.pathname + "?g=" + encodeURIComponent(chain)
         : "";
-    const url =
-      typeof window !== "undefined"
-        ? new URL(path, window.location.origin).href
-        : path;
-    navigator.clipboard?.writeText(url);
+    return typeof window !== "undefined"
+      ? new URL(path, window.location.origin).href
+      : path;
   };
 
   // When "You already played" is shown, load the current user's solution for the "Your solution" section.
@@ -358,6 +362,7 @@ export const ZipPlay: Component = () => {
             gridSize: data.gridSize ?? 7,
             name: me.name,
             isNovel: data.isNovel === true,
+            gradientSeed: state.gradientSeed,
           });
         }
       })
@@ -417,6 +422,28 @@ export const ZipPlay: Component = () => {
                 </For>
               </ul>
             </Show>
+            <Show when={playPageGameSeed()}>
+              <div class="mt-4 rounded-lg border border-zinc-200 bg-white p-3">
+                <p class="mb-1 text-xs font-medium text-zinc-600">
+                  Recreate this puzzle (use on Create → Import game seed):
+                </p>
+                <div class="flex gap-2">
+                  <code class="flex-1 truncate rounded bg-zinc-100 px-2 py-1 text-xs text-zinc-800">
+                    {playPageGameSeed()}
+                  </code>
+                  <CopyButton
+                    text={playPageGameSeed() ?? ""}
+                    label="Copy seed"
+                  />
+                </div>
+                <a
+                  href="/play/zip/create"
+                  class="mt-2 inline-block text-sm text-emerald-600 hover:underline"
+                >
+                  Create page →
+                </a>
+              </div>
+            </Show>
             <a
               href="/play/zip/create"
               class="mt-4 inline-block text-emerald-600 hover:underline"
@@ -434,7 +461,7 @@ export const ZipPlay: Component = () => {
       >
         <main class="flex min-h-screen flex-col items-center justify-center bg-zinc-50 p-4">
           <div class="mx-auto w-full max-w-xl rounded-xl border border-zinc-200 bg-white p-6 text-center">
-            <h1 class="mb-2 text-lg font-semibold">You already played</h1>
+            <h1 class="mb-2 text-lg font-semibold">Game Finished</h1>
             <p class="mb-4 text-sm text-zinc-600">
               Share the link with someone else!
             </p>
@@ -593,6 +620,19 @@ export const ZipPlay: Component = () => {
                   </div>
                 </Show>
               </>
+            </Show>
+            <Show when={playPageGameSeed()}>
+              <div class="mb-4 rounded-lg border border-zinc-200 bg-zinc-50 p-2">
+                <p class="mb-1 text-xs font-medium text-zinc-600">
+                  Game seed (recreate puzzle after 24h):
+                </p>
+                <div class="flex gap-2">
+                  <code class="flex-1 truncate rounded bg-white px-2 py-1 text-xs text-zinc-800">
+                    {playPageGameSeed()}
+                  </code>
+                  <CopyButton text={playPageGameSeed() ?? ""} />
+                </div>
+              </div>
             </Show>
             <a href="/play/zip/create" class="text-emerald-600 hover:underline">
               Create a new puzzle
@@ -766,6 +806,7 @@ export const ZipPlay: Component = () => {
               board={zipState()!.board}
               waypointCount={zipState()!.waypointCount}
               onSolve={handleSolve}
+              gradientSeed={zipState()?.gradientSeed}
             />
             <Show when={submitError()}>
               <p class="mt-2 text-sm text-red-600">{submitError()}</p>
@@ -904,13 +945,10 @@ export const ZipPlay: Component = () => {
                     }
                     class="flex-1 truncate rounded border border-zinc-200 bg-white px-2 py-1.5 text-xs"
                   />
-                  <button
-                    type="button"
-                    onClick={copyShareLink}
+                  <CopyButton
+                    text={shareLinkCopyText()}
                     class="shrink-0 rounded bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500"
-                  >
-                    Copy
-                  </button>
+                  />
                 </div>
                 <Show when={submitError()}>
                   <p class="mt-2 text-sm text-red-600">{submitError()}</p>

@@ -94,10 +94,53 @@ export function zipBoardGetCellCenter(
 export interface PaintZipBoardOptions {
   /** When true and path.length === 1, fill start cell with #ffedd5 */
   highlightStartCell?: boolean;
+  /** Stable seed (e.g. chain + userId) for deterministic path gradient colors per game/user */
+  gradientSeed?: string;
 }
 
 const PATH_GRADIENT_START = "#f97316";
 const PATH_GRADIENT_END = "#9a3412";
+
+/** Deterministic hash of a string to a number (djb2). */
+function hashString(s: string): number {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) + h) ^ s.charCodeAt(i);
+  }
+  return h >>> 0;
+}
+
+/** HSL to hex (h 0–360, s and l 0–100). */
+function hslToHex(h: number, s: number, l: number): string {
+  s /= 100;
+  l /= 100;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12;
+    return l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+  };
+  const r = Math.round(f(0) * 255);
+  const g = Math.round(f(8) * 255);
+  const b = Math.round(f(4) * 255);
+  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+}
+
+/**
+ * Returns a stable gradient (start, end) for a seed string (e.g. chain + "\0" + userId).
+ * Same seed always gives the same colors; different games/users get different colors.
+ */
+export function getGradientColorsForSeed(seed: string): {
+  start: string;
+  end: string;
+} {
+  const h = hashString(seed);
+  const hue = h % 360;
+  const hueEnd = (hue + 70 + (h % 40)) % 360;
+  return {
+    start: hslToHex(hue, 72, 52),
+    end: hslToHex(hueEnd, 68, 38),
+  };
+}
 
 /** Interpolate between two hex colors; t in [0, 1]. */
 function lerpHex(hexStart: string, hexEnd: string, t: number): string {
@@ -132,6 +175,9 @@ export function paintZipBoard(
   const totalW = theme.pad * 2 + size * cs + (size - 1) * theme.gap;
   const totalH = totalW;
   const highlightStart = options.highlightStartCell ?? false;
+  const pathColors = options.gradientSeed
+    ? getGradientColorsForSeed(options.gradientSeed)
+    : { start: PATH_GRADIENT_START, end: PATH_GRADIENT_END };
 
   const center = (index: number) =>
     zipBoardGetCellCenter(index, size, theme, getCellSize);
@@ -181,7 +227,7 @@ export function paintZipBoard(
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     if (path.length === 1) {
-      ctx.fillStyle = PATH_GRADIENT_START;
+      ctx.fillStyle = pathColors.start;
       ctx.beginPath();
       ctx.arc(pts[0].x, pts[0].y, lw / 2, 0, Math.PI * 2);
       ctx.fill();
@@ -198,11 +244,7 @@ export function paintZipBoard(
           const j0 = j / subdivisions;
           const j1 = (j + 1) / subdivisions;
           const progress = (i + (j + 0.5) / subdivisions) / n;
-          ctx.strokeStyle = lerpHex(
-            PATH_GRADIENT_START,
-            PATH_GRADIENT_END,
-            progress,
-          );
+          ctx.strokeStyle = lerpHex(pathColors.start, pathColors.end, progress);
           ctx.beginPath();
           ctx.moveTo(ax + (bx - ax) * j0, ay + (by - ay) * j0);
           ctx.lineTo(ax + (bx - ax) * j1, ay + (by - ay) * j1);

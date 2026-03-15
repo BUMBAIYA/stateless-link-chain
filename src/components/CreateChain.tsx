@@ -1,14 +1,19 @@
 import { type Component, Show } from "solid-js";
 
+import { CopyButton } from "@/components/CopyButton";
+
 interface CreateChainProps {
   loading: boolean;
   link: () => string | null;
   onCreate: () => void;
-  onCopy: () => void;
-  copyFeedback: () => boolean;
+  /** Full URL to copy (e.g. origin + link). If not set, link() is used. */
+  copyText?: () => string;
 }
 
 export const CreateChain: Component<CreateChainProps> = (props) => {
+  const textToCopy = () =>
+    (props.copyText?.() ?? props.link() ?? "").trim() || "";
+
   return (
     <section class="mb-8 rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
       <h2 class="mb-3 text-sm font-medium tracking-wider text-zinc-500 uppercase">
@@ -37,13 +42,10 @@ export const CreateChain: Component<CreateChainProps> = (props) => {
             >
               {props.link()}
             </code>
-            <button
-              type="button"
-              onClick={() => props.onCopy()}
+            <CopyButton
+              text={textToCopy()}
               class="shrink-0 rounded bg-zinc-200 px-2 py-1.5 text-xs text-zinc-700 hover:bg-zinc-300"
-            >
-              {props.copyFeedback() ? "Copied!" : "Copy"}
-            </button>
+            />
           </div>
         </div>
       </Show>

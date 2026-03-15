@@ -25,6 +25,8 @@ interface ZipGameCanvasProps {
   board: number[];
   waypointCount: number;
   onSolve: (timeMs: number, moves: number, path: number[]) => void;
+  /** Stable seed for path gradient (e.g. chain + userId) so color doesn't change as path grows */
+  gradientSeed?: string;
 }
 
 export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
@@ -164,7 +166,10 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
     if (!ctx) return;
     ctx.scale(dpr, dpr);
 
-    paintZipBoard(ctx, s, b, p, theme, { highlightStartCell: true });
+    paintZipBoard(ctx, s, b, p, theme, {
+      highlightStartCell: true,
+      gradientSeed: props.gradientSeed,
+    });
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   };
 

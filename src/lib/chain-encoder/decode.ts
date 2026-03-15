@@ -1,5 +1,6 @@
 import LZString from "lz-string";
-import type { ChainState } from "./types";
+
+import type { ChainState } from "@/lib/chain-encoder/types";
 
 /**
  * Decompress and decode the payload into chain state.

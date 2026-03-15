@@ -24,4 +24,6 @@ export interface ChainState {
   createdAt?: number;
   /** Zip: creator's solution path (cell indices) for novelty check */
   solution?: number[];
+  /** Zip: deterministic path gradient seed (creatorId + game seed), same for all users */
+  gradientSeed?: string;
 }

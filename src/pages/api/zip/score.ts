@@ -83,6 +83,7 @@ export const GET: APIRoute = async ({ url }): Promise<Response> => {
     players: scoreboardPlayers(state.players, state.solution),
     createdAt,
     expired,
+    gradientSeed: state.gradientSeed,
   });
 };
 
@@ -115,5 +116,6 @@ export const POST: APIRoute = async ({ request }): Promise<Response> => {
     players: scoreboardPlayers(state.players, state.solution),
     createdAt,
     expired,
+    gradientSeed: state.gradientSeed,
   });
 };
