@@ -1,0 +1,162 @@
+---
+import Layout from "@/layouts/Layout.astro";
+---
+
+<Layout>
+  <main class="min-h-screen bg-zinc-50 font-sans text-zinc-900">
+    <div class="mx-auto max-w-2xl px-4 py-10">
+      <h1 class="text-2xl font-semibold tracking-tight text-zinc-900">
+        How Zip works
+      </h1>
+      <p class="mt-2 text-zinc-600">
+        Zip is a path puzzle: connect waypoints in order and fill every cell. No
+        accounts, no server storing your game—everything lives in a shareable
+        link. Here's how to create, play, and what to expect.
+      </p>
+
+      <section class="mt-10">
+        <h2 class="text-lg font-semibold text-zinc-800">
+          How to create a puzzle
+        </h2>
+        <ol class="mt-3 list-inside list-decimal space-y-2 text-zinc-600">
+          <li>
+            Go to <a
+              href="/play/zip/create"
+              class="text-emerald-600 hover:underline">Create</a
+            > and pick a grid size (4×4 up to 8×8).
+          </li>
+          <li>
+            <strong>Draw the path</strong> by tapping or dragging through every non-blocked
+            cell. You can mark some cells as blocked (they stay dark).
+          </li>
+          <li>
+            When the path is complete, switch to <strong>Place waypoints</strong
+            > and put numbers 1, 2, 3, … on the path in order. Waypoint 1 must be
+            on the start of the path and the last number on the end.
+          </li>
+          <li>
+            Click <strong>Create game link</strong>. You get a single link that
+            contains the whole puzzle (and the creator's solution for checking).
+            The link is valid for 24 hours.
+          </li>
+          <li>
+            You also get a <strong>game seed</strong>. If the link expires,
+            anyone with the seed can recreate the same puzzle on the Create page
+            (Import game seed) and get a new link.
+          </li>
+        </ol>
+      </section>
+
+      <section class="mt-10">
+        <h2 class="text-lg font-semibold text-zinc-800">How to play</h2>
+        <ol class="mt-3 list-inside list-decimal space-y-2 text-zinc-600">
+          <li>
+            Open the game link (from the creator or a friend who already
+            played).
+          </li>
+          <li>
+            Enter your name and start. You only get <strong
+              >one attempt per link</strong
+            >—no do-overs with the same name.
+          </li>
+          <li>
+            Draw a path that visits waypoints 1 → 2 → … in order and fills every
+            non-blocked cell. Tap or drag on the grid.
+          </li>
+          <li>
+            When you finish, your score (moves and time) is saved into the link.
+            You'll see a <strong>new link</strong>—that's the same game plus
+            your result. Share that link so others can play and see the updated
+            scoreboard.
+          </li>
+        </ol>
+      </section>
+
+      <section class="mt-10">
+        <h2 class="text-lg font-semibold text-zinc-800">
+          How the link (and scoreboard) works
+        </h2>
+        <p class="mt-3 text-zinc-600">
+          The link is a <strong>stateless chain</strong>: the full game state
+          (puzzle, creator solution, and every player's score and path) is
+          encoded in the URL. There is no central server storing “this game.”
+          When someone opens the link, their browser decodes it and shows the
+          current scoreboard. When a new person plays, they submit their result
+          and get back an updated link that includes their entry. So the
+          "scoreboard" is whatever is inside the link you're looking at.
+        </p>
+        <p class="mt-3 text-zinc-600">
+          <strong>Important:</strong> you don't see live updates. You only see the
+          scores (and solutions) of people whose <strong>updated link</strong> you
+          have. If Alice plays and shares her new link with the group, everyone who
+          opens that link sees Alice's score. If Bob plays next and shares his link,
+          that link includes both Alice and Bob—but people who only have Alice's link
+          won't see Bob until someone shares the latest link. So the "next person's
+          score” isn’t visible to you until they (or someone else) share the link
+          that contains their result.
+        </p>
+      </section>
+
+      <section class="mt-10">
+        <h2 class="text-lg font-semibold text-zinc-800">
+          Downsides and trade-offs
+        </h2>
+        <ul class="mt-3 list-inside list-disc space-y-2 text-zinc-600">
+          <li>
+            <strong>No live scoreboard.</strong> You only see scores that are in the
+            link you opened. To see who played after you, someone must share the latest
+            game link.
+          </li>
+          <li>
+            <strong>One play per person per game.</strong> Your name is tied to one
+            solution; you can't replay with the same link.
+          </li>
+          <li>
+            <strong>Links expire after 24 hours.</strong> After that, the puzzle is
+            read-only (you can still view results). Use the <strong
+              >game seed</strong
+            > to recreate the same puzzle and get a new link.
+          </li>
+          <li>
+            <strong>Long URLs.</strong> The more players, the longer the link. Fine
+            for sharing in chat or groups; not ideal for typing by hand.
+          </li>
+        </ul>
+      </section>
+
+      <section class="mt-10">
+        <h2 class="text-lg font-semibold text-zinc-800">
+          Made to play with friends
+        </h2>
+        <p class="mt-3 text-zinc-600">
+          Zip is built for a small group of friends. One person creates a puzzle
+          and shares the link. Everyone plays and then shares their <strong
+            >completed</strong
+          > link back into the group (e.g. in a WhatsApp group, Discord, or thread).
+          Each time someone shares the latest link, the whole group can open it and
+          see the full scoreboard and who found a different ("Novel") solution. You
+          compare scores and solutions by passing around the same evolving link—no
+          accounts, no app, just one link that gets updated as people play. It's a
+          bit like a chain letter: the game grows as each friend adds their result
+          and shares it forward.
+        </p>
+      </section>
+
+      <nav class="mt-12 flex flex-wrap gap-4 border-t border-zinc-200 pt-8">
+        <a
+          href="/play/zip/create"
+          class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500"
+        >
+          Create a puzzle
+        </a>
+        <a
+          href="/play/zip"
+          class="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+        >
+          Play (with a link)
+        </a>
+        <a href="/" class="text-sm text-zinc-500 hover:underline">Home</a>
+      </nav>
+    </div>
+  </main>
+</Layout>

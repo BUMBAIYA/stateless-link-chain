@@ -26,3 +26,6 @@ pnpm-debug.log*
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# cursor setting folder
+.cursor/
