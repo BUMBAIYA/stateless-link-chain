@@ -96,6 +96,8 @@ export interface PaintZipBoardOptions {
   highlightStartCell?: boolean;
   /** Stable seed (e.g. chain + userId) for deterministic path gradient colors per game/user */
   gradientSeed?: string;
+  /** Draw only path[0..pathDrawLength-1] (for completion animation). Default: full path. */
+  pathDrawLength?: number;
 }
 
 const PATH_GRADIENT_START = "#f97316";
@@ -187,7 +189,7 @@ export function paintZipBoard(
   ctx.roundRect(0, 0, totalW, totalH, theme.boardRadius);
   ctx.clip();
 
-  ctx.fillStyle = "#f4f4f5";
+  ctx.fillStyle = "#fafafa";
   ctx.fillRect(0, 0, totalW, totalH);
 
   for (let i = 0; i < size * size; i++) {
@@ -196,10 +198,10 @@ export function paintZipBoard(
     const x = theme.pad + c * (cs + theme.gap);
     const y = theme.pad + r * (cs + theme.gap);
     if (board[i] === BLOCKED) {
-      ctx.fillStyle = "#3f3f46";
+      ctx.fillStyle = "#27272a";
       ctx.fillRect(x, y, cs, cs);
     } else {
-      ctx.fillStyle = "#fff";
+      ctx.fillStyle = "#ffffff";
       ctx.fillRect(x, y, cs, cs);
       ctx.strokeStyle = theme.gridStrokeStyle;
       ctx.lineWidth = theme.gridLineWidth;
@@ -207,26 +209,32 @@ export function paintZipBoard(
     }
   }
 
-  if (path.length === 1 && highlightStart) {
+  const drawLen = Math.min(
+    path.length,
+    Math.max(0, Math.floor(options.pathDrawLength ?? path.length)),
+  );
+  const pathDraw = path.slice(0, drawLen);
+
+  if (highlightStart && drawLen === 1 && path.length >= 1) {
     const startIdx = path[0];
     const r = Math.floor(startIdx / size);
     const c = startIdx % size;
     const x = theme.pad + c * (cs + theme.gap);
     const y = theme.pad + r * (cs + theme.gap);
-    ctx.fillStyle = "#ffedd5";
+    ctx.fillStyle = "#ecfdf5";
     ctx.fillRect(x, y, cs, cs);
     ctx.strokeStyle = theme.gridStrokeStyle;
     ctx.lineWidth = theme.gridLineWidth;
     ctx.strokeRect(x, y, cs, cs);
   }
 
-  if (path.length > 0) {
-    const pts = path.map((i) => center(i));
+  if (pathDraw.length > 0) {
+    const pts = pathDraw.map((i) => center(i));
     const lw = cs * theme.pathWidthRatio;
     ctx.lineWidth = lw;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    if (path.length === 1) {
+    if (pathDraw.length === 1) {
       ctx.fillStyle = pathColors.start;
       ctx.beginPath();
       ctx.arc(pts[0].x, pts[0].y, lw / 2, 0, Math.PI * 2);

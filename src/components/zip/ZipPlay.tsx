@@ -459,184 +459,212 @@ export const ZipPlay: Component = () => {
           !loading() && zipState() && !zipState()!.expired && alreadyPlayed()
         }
       >
-        <main class="flex min-h-screen flex-col items-center justify-center bg-zinc-50 p-4">
-          <div class="mx-auto w-full max-w-xl rounded-xl border border-zinc-200 bg-white p-6 text-center">
-            <h1 class="mb-2 text-lg font-semibold">Game Finished</h1>
-            <p class="mb-4 text-sm text-zinc-600">
-              Share the link with someone else!
-            </p>
-            <Show when={currentUserPlayer()}>
-              {(me) => {
-                const player = me();
-                const sorted = () =>
-                  zipState()
-                    ? [...zipState()!.players].sort((a, b) => a.score - b.score)
-                    : [];
-                const rank = () => {
-                  const i = sorted().findIndex(
-                    (p) => p.userId === player.userId,
-                  );
-                  return i >= 0 ? i + 1 : null;
-                };
-                return (
-                  <div class="mb-4 text-left">
-                    <p class="mb-2 text-xs font-medium text-zinc-500">
-                      Your result
-                    </p>
-                    <p class="mb-2 text-sm text-zinc-700">
-                      {rank() != null && (
-                        <>
-                          <span class="font-medium">{player.name}</span> —{" "}
-                          {rank()}
-                          {rank() === 1
-                            ? "st"
-                            : rank() === 2
-                              ? "nd"
-                              : rank() === 3
-                                ? "rd"
-                                : "th"}{" "}
-                          place
-                        </>
-                      )}
-                      {player.score} moves, {Math.round(player.time / 1000)}s
-                      {currentUserPlayer()?.isNovel && (
-                        <span class="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
-                          Novel
-                        </span>
-                      )}
-                    </p>
-                    <p class="mb-1 text-xs font-medium text-zinc-500">
-                      Your solution
-                    </p>
-                    <Show when={yourSolutionLoading()}>
-                      <p class="text-xs text-zinc-500">Loading…</p>
-                    </Show>
-                    <Show when={!yourSolutionLoading() && yourSolutionData()}>
-                      <SolutionGrid data={yourSolutionData()!} />
-                    </Show>
-                  </div>
-                );
-              }}
-            </Show>
-            <Show when={zipState() && zipState()!.players.length > 0}>
-              <>
-                <div class="mb-2 flex items-center justify-between">
-                  <p class="text-xs font-medium text-zinc-500">Scoreboard</p>
-                  <Show
-                    when={
-                      zipState()?.solution &&
-                      Array.isArray(zipState()!.solution) &&
-                      zipState()!.solution!.length > 0
-                    }
-                  >
-                    <button
-                      type="button"
-                      onClick={openCreatorSolutionViewer}
-                      class="text-xs text-emerald-600 hover:underline"
-                    >
-                      View actual solution
-                    </button>
-                  </Show>
-                </div>
-                <ul class="mb-2 space-y-1 text-left text-sm">
-                  <For
-                    each={
+        <main class="min-h-screen bg-linear-to-b from-zinc-50 via-white to-zinc-50/90 p-4 pb-10 md:p-8">
+          <div class="mx-auto flex w-full max-w-5xl flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
+            <div class="order-1 min-w-0 flex-1 space-y-6">
+              <div class="rounded-2xl border border-zinc-200/90 bg-white p-6 shadow-sm ring-1 ring-zinc-100">
+                <h1 class="mb-1 text-xl font-semibold tracking-tight text-zinc-900">
+                  Game finished
+                </h1>
+                <p class="text-sm text-zinc-600">
+                  Share the link with someone else!
+                </p>
+                <Show when={currentUserPlayer()}>
+                  {(me) => {
+                    const player = me();
+                    const sorted = () =>
                       zipState()
                         ? [...zipState()!.players].sort(
                             (a, b) => a.score - b.score,
                           )
-                        : []
-                    }
-                  >
-                    {(p, i) => (
-                      <li class="flex flex-wrap items-center justify-between gap-x-2">
-                        <span>
-                          {i() + 1}. {p.name} — {p.score} moves
-                        </span>
-                        <span class="flex items-center gap-2">
-                          {p.isNovel && (
-                            <span class="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
+                        : [];
+                    const rank = () => {
+                      const i = sorted().findIndex(
+                        (p) => p.userId === player.userId,
+                      );
+                      return i >= 0 ? i + 1 : null;
+                    };
+                    return (
+                      <div class="mt-6 border-t border-zinc-100 pt-6 text-left">
+                        <p class="mb-2 text-xs font-semibold tracking-wide text-zinc-500 uppercase">
+                          Your result
+                        </p>
+                        <p class="mb-4 text-sm text-zinc-800">
+                          {rank() != null && (
+                            <>
+                              <span class="font-semibold">{player.name}</span>
+                              {" — "}
+                              {rank()}
+                              {rank() === 1
+                                ? "st"
+                                : rank() === 2
+                                  ? "nd"
+                                  : rank() === 3
+                                    ? "rd"
+                                    : "th"}{" "}
+                              place ·{" "}
+                            </>
+                          )}
+                          {player.score} moves ·{" "}
+                          {Math.round(player.time / 1000)}s
+                          {currentUserPlayer()?.isNovel && (
+                            <span class="ml-2 inline-block rounded-md bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
                               Novel
                             </span>
                           )}
-                          <Show when={p.userId}>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                openSolutionViewer(p.name, p.userId!)
-                              }
-                              class="text-emerald-600 hover:underline"
-                            >
-                              View
-                            </button>
-                          </Show>
-                        </span>
-                      </li>
-                    )}
-                  </For>
-                </ul>
-                <Show when={viewingCreatorSolution() && creatorSolutionData()}>
-                  <div class="mb-4 rounded border border-zinc-200 bg-zinc-50 p-2 text-left">
-                    <p class="mb-1 text-xs font-medium text-zinc-600">
-                      Creator's solution
+                        </p>
+                        <p class="mb-2 text-xs font-semibold tracking-wide text-zinc-500 uppercase">
+                          Your solution
+                        </p>
+                        <Show when={yourSolutionLoading()}>
+                          <p class="text-xs text-zinc-500">Loading…</p>
+                        </Show>
+                        <Show
+                          when={!yourSolutionLoading() && yourSolutionData()}
+                        >
+                          <div class="flex justify-center rounded-xl bg-zinc-50/80 p-3 ring-1 ring-zinc-100 md:justify-start">
+                            <SolutionGrid data={yourSolutionData()!} />
+                          </div>
+                        </Show>
+                      </div>
+                    );
+                  }}
+                </Show>
+                <Show when={playPageGameSeed()}>
+                  <div class="mt-6 rounded-xl border border-zinc-200 bg-zinc-50/60 p-4">
+                    <p class="mb-2 text-xs font-semibold text-zinc-600">
+                      Game seed (recreate after 24h)
                     </p>
-                    <SolutionGrid data={creatorSolutionData()!} />
-                    <button
-                      type="button"
-                      onClick={closeSolutionViewer}
-                      class="mt-1 text-xs text-zinc-500 hover:underline"
-                    >
-                      Close
-                    </button>
+                    <div class="flex gap-2">
+                      <code class="flex-1 truncate rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-xs text-zinc-800">
+                        {playPageGameSeed()}
+                      </code>
+                      <CopyButton text={playPageGameSeed() ?? ""} />
+                    </div>
                   </div>
                 </Show>
-                <Show when={viewingPlayer()}>
-                  <div class="mb-4 rounded border border-zinc-200 bg-zinc-50 p-2 text-left">
-                    <p class="mb-1 text-xs font-medium text-zinc-600">
-                      {viewingPlayer()!.name}'s solution
-                    </p>
-                    <Show when={solutionLoading()}>
-                      <p class="text-xs text-zinc-500">Loading…</p>
-                    </Show>
-                    <Show when={!solutionLoading() && solutionData()}>
-                      {(sd) => (
-                        <>
-                          {sd().isNovel && (
-                            <span class="mb-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
-                              Novel
-                            </span>
-                          )}
-                          <SolutionGrid data={sd()} />
-                        </>
-                      )}
-                    </Show>
-                    <button
-                      type="button"
-                      onClick={closeSolutionViewer}
-                      class="mt-1 text-xs text-zinc-500 hover:underline"
-                    >
-                      Close
-                    </button>
-                  </div>
-                </Show>
-              </>
-            </Show>
-            <Show when={playPageGameSeed()}>
-              <div class="mb-4 rounded-lg border border-zinc-200 bg-zinc-50 p-2">
-                <p class="mb-1 text-xs font-medium text-zinc-600">
-                  Game seed (recreate puzzle after 24h):
-                </p>
-                <div class="flex gap-2">
-                  <code class="flex-1 truncate rounded bg-white px-2 py-1 text-xs text-zinc-800">
-                    {playPageGameSeed()}
-                  </code>
-                  <CopyButton text={playPageGameSeed() ?? ""} />
-                </div>
+                <a
+                  href="/play/zip/create"
+                  class="mt-6 inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-600 hover:underline"
+                >
+                  Create a new puzzle
+                </a>
               </div>
-            </Show>
-            <a href="/play/zip/create" class="text-emerald-600 hover:underline">
-              Create a new puzzle
-            </a>
+            </div>
+
+            <aside class="order-2 w-full shrink-0 lg:sticky lg:top-6 lg:w-80">
+              <Show when={zipState() && zipState()!.players.length > 0}>
+                <div class="rounded-2xl border border-zinc-200/90 bg-white p-5 shadow-sm ring-1 ring-emerald-950/5">
+                  <div class="mb-4 flex items-center justify-between gap-2">
+                    <h2 class="text-sm font-semibold text-zinc-900">
+                      Scoreboard
+                    </h2>
+                    <Show
+                      when={
+                        zipState()?.solution &&
+                        Array.isArray(zipState()!.solution) &&
+                        zipState()!.solution!.length > 0
+                      }
+                    >
+                      <button
+                        type="button"
+                        onClick={openCreatorSolutionViewer}
+                        class="shrink-0 text-xs font-medium text-emerald-700 hover:underline"
+                      >
+                        Creator solution
+                      </button>
+                    </Show>
+                  </div>
+                  <ul class="space-y-0 divide-y divide-zinc-100 text-left text-sm">
+                    <For
+                      each={
+                        zipState()
+                          ? [...zipState()!.players].sort(
+                              (a, b) => a.score - b.score,
+                            )
+                          : []
+                      }
+                    >
+                      {(p, i) => (
+                        <li class="flex flex-wrap items-center justify-between gap-x-2 py-3 first:pt-0">
+                          <span class="text-zinc-800">
+                            <span class="mr-2 font-mono text-zinc-400 tabular-nums">
+                              {i() + 1}
+                            </span>
+                            {p.name}
+                          </span>
+                          <span class="flex items-center gap-2">
+                            <span class="text-zinc-500">{p.score} moves</span>
+                            {p.isNovel && (
+                              <span class="rounded-md bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900">
+                                Novel
+                              </span>
+                            )}
+                            <Show when={p.userId}>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  openSolutionViewer(p.name, p.userId!)
+                                }
+                                class="text-xs font-medium text-emerald-700 hover:underline"
+                              >
+                                View
+                              </button>
+                            </Show>
+                          </span>
+                        </li>
+                      )}
+                    </For>
+                  </ul>
+                  <Show
+                    when={viewingCreatorSolution() && creatorSolutionData()}
+                  >
+                    <div class="mt-4 rounded-xl border border-zinc-200 bg-zinc-50/90 p-3 text-left">
+                      <p class="mb-2 text-xs font-semibold text-zinc-700">
+                        Creator&apos;s solution
+                      </p>
+                      <SolutionGrid data={creatorSolutionData()!} />
+                      <button
+                        type="button"
+                        onClick={closeSolutionViewer}
+                        class="mt-2 text-xs font-medium text-zinc-500 hover:text-zinc-700 hover:underline"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </Show>
+                  <Show when={viewingPlayer()}>
+                    <div class="mt-4 rounded-xl border border-zinc-200 bg-zinc-50/90 p-3 text-left">
+                      <p class="mb-2 text-xs font-semibold text-zinc-700">
+                        {viewingPlayer()!.name}&apos;s solution
+                      </p>
+                      <Show when={solutionLoading()}>
+                        <p class="text-xs text-zinc-500">Loading…</p>
+                      </Show>
+                      <Show when={!solutionLoading() && solutionData()}>
+                        {(sd) => (
+                          <>
+                            {sd().isNovel && (
+                              <span class="mb-2 inline-block rounded-md bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
+                                Novel
+                              </span>
+                            )}
+                            <SolutionGrid data={sd()} />
+                          </>
+                        )}
+                      </Show>
+                      <button
+                        type="button"
+                        onClick={closeSolutionViewer}
+                        class="mt-2 text-xs font-medium text-zinc-500 hover:text-zinc-700 hover:underline"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </Show>
+                </div>
+              </Show>
+            </aside>
           </div>
         </main>
       </Show>
@@ -796,83 +824,114 @@ export const ZipPlay: Component = () => {
           nameSubmitted()
         }
       >
-        <main class="min-h-screen bg-zinc-50 p-4 font-sans text-zinc-900">
-          <div class="mx-auto flex max-w-lg flex-col items-center">
-            <h1 class="mb-2 text-lg font-semibold">Zip</h1>
-            <p class="mb-4 text-sm text-zinc-600">
-              Playing as{" "}
-              <span class="font-medium text-zinc-800">
-                {playerName().trim() || "—"}
-              </span>
-            </p>
-            <ZipGameCanvas
-              gridSize={zipState()!.gridSize}
-              board={zipState()!.board}
-              waypointCount={zipState()!.waypointCount}
-              onSolve={handleSolve}
-              gradientSeed={zipState()?.gradientSeed}
-            />
-            <Show when={submitError()}>
-              <p class="mt-2 text-sm text-red-600">{submitError()}</p>
-            </Show>
-            <Show when={alreadyPlayed()}>
-              <div class="mt-8 w-full max-w-sm">
-                <div class="mb-2 flex items-center justify-between">
-                  <h2 class="text-sm font-medium text-zinc-600">Scoreboard</h2>
-                  <Show
-                    when={
-                      zipState()?.solution &&
-                      Array.isArray(zipState()!.solution) &&
-                      zipState()!.solution!.length > 0
-                    }
-                  >
-                    <button
-                      type="button"
-                      onClick={openCreatorSolutionViewer}
-                      class="text-sm text-emerald-600 hover:underline"
-                    >
-                      View actual solution
-                    </button>
+        <main class="min-h-screen bg-linear-to-b from-zinc-50 via-white to-zinc-50/90 p-4 pb-10 font-sans text-zinc-900 md:p-8">
+          <div class="mx-auto flex w-full max-w-5xl flex-col gap-8 lg:flex-row lg:items-start lg:gap-10">
+            <div class="flex min-w-0 flex-1 flex-col items-center">
+              <h1 class="mb-1 text-xl font-semibold tracking-tight text-zinc-900">
+                Zip
+              </h1>
+              <p class="mb-6 text-sm text-zinc-600">
+                Playing as{" "}
+                <span class="font-semibold text-zinc-800">
+                  {playerName().trim() || "—"}
+                </span>
+              </p>
+              <ZipGameCanvas
+                gridSize={zipState()!.gridSize}
+                board={zipState()!.board}
+                waypointCount={zipState()!.waypointCount}
+                onSolve={handleSolve}
+                gradientSeed={zipState()?.gradientSeed}
+              />
+              <Show when={submitError()}>
+                <p class="mt-3 text-sm text-red-600">{submitError()}</p>
+              </Show>
+              <Show when={justSolved() && newChain()}>
+                <div class="mt-8 w-full max-w-md rounded-2xl border border-emerald-200/90 bg-linear-to-br from-emerald-50 to-white p-5 shadow-sm ring-1 ring-emerald-900/5">
+                  <h2 class="mb-1 text-lg font-semibold text-emerald-800">
+                    You solved it!
+                  </h2>
+                  <p class="mb-4 text-sm text-zinc-600">
+                    Share this link with friends. They have 24 hours to play.
+                  </p>
+                  <div class="flex gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={
+                        typeof window !== "undefined"
+                          ? window.location.origin +
+                            window.location.pathname +
+                            "?g=" +
+                            encodeURIComponent(newChain()!)
+                          : ""
+                      }
+                      class="flex-1 truncate rounded-lg border border-zinc-200 bg-white px-2 py-2 text-xs"
+                    />
+                    <CopyButton
+                      text={shareLinkCopyText()}
+                      class="shrink-0 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-500"
+                    />
+                  </div>
+                  <Show when={submitError()}>
+                    <p class="mt-2 text-sm text-red-600">{submitError()}</p>
                   </Show>
                 </div>
-                <ul class="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-                  <Show
-                    when={zipState()!.players.length > 0}
-                    fallback={
-                      <li class="py-2 text-sm text-zinc-500">
-                        No scores yet. Be the first!
-                      </li>
-                    }
-                  >
+              </Show>
+            </div>
+            <Show when={zipState()!.players.length > 0}>
+              <aside class="w-full shrink-0 lg:sticky lg:top-6 lg:w-80">
+                <div class="rounded-2xl border border-zinc-200/90 bg-white p-5 shadow-sm ring-1 ring-emerald-950/5">
+                  <div class="mb-4 flex items-center justify-between gap-2">
+                    <h2 class="text-sm font-semibold text-zinc-900">
+                      Scoreboard
+                    </h2>
+                    <Show
+                      when={
+                        zipState()?.solution &&
+                        Array.isArray(zipState()!.solution) &&
+                        zipState()!.solution!.length > 0
+                      }
+                    >
+                      <button
+                        type="button"
+                        onClick={openCreatorSolutionViewer}
+                        class="shrink-0 text-xs font-medium text-emerald-700 hover:underline"
+                      >
+                        Creator solution
+                      </button>
+                    </Show>
+                  </div>
+                  <ul class="space-y-0 divide-y divide-zinc-100 text-left text-sm">
                     <For
                       each={[...zipState()!.players].sort(
                         (a, b) => a.score - b.score,
                       )}
                     >
                       {(p, i) => (
-                        <li class="flex flex-wrap items-center justify-between gap-x-2 border-b border-zinc-100 py-2 text-sm last:border-0">
-                          <span>
-                            {i() + 1}. {p.name}
+                        <li class="flex flex-wrap items-center justify-between gap-x-2 py-3 first:pt-0">
+                          <span class="text-zinc-800">
+                            <span class="mr-2 font-mono text-zinc-400 tabular-nums">
+                              {i() + 1}
+                            </span>
+                            {p.name}
                           </span>
                           <span class="flex items-center gap-2">
+                            <span class="text-zinc-500">
+                              {p.score} moves · {Math.round(p.time / 1000)}s
+                            </span>
                             {p.isNovel && (
-                              <span
-                                class="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800"
-                                title="Different solution from creator"
-                              >
+                              <span class="rounded-md bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900">
                                 Novel
                               </span>
                             )}
-                            <span class="text-zinc-500">
-                              {p.score} moves, {Math.round(p.time / 1000)}s
-                            </span>
                             <Show when={p.userId}>
                               <button
                                 type="button"
                                 onClick={() =>
                                   openSolutionViewer(p.name, p.userId!)
                                 }
-                                class="text-emerald-600 hover:underline"
+                                class="text-xs font-medium text-emerald-700 hover:underline"
                               >
                                 View
                               </button>
@@ -881,85 +940,55 @@ export const ZipPlay: Component = () => {
                         </li>
                       )}
                     </For>
+                  </ul>
+                  <Show
+                    when={viewingCreatorSolution() && creatorSolutionData()}
+                  >
+                    <div class="mt-4 rounded-xl border border-zinc-200 bg-zinc-50/90 p-3 text-left">
+                      <p class="mb-2 text-xs font-semibold text-zinc-700">
+                        Creator&apos;s solution
+                      </p>
+                      <SolutionGrid data={creatorSolutionData()!} />
+                      <button
+                        type="button"
+                        onClick={closeSolutionViewer}
+                        class="mt-2 text-xs font-medium text-zinc-500 hover:text-zinc-700 hover:underline"
+                      >
+                        Close
+                      </button>
+                    </div>
                   </Show>
-                </ul>
-                <Show when={viewingCreatorSolution() && creatorSolutionData()}>
-                  <div class="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
-                    <p class="mb-2 text-xs font-medium text-zinc-600">
-                      Creator's solution
-                    </p>
-                    <SolutionGrid data={creatorSolutionData()!} />
-                    <button
-                      type="button"
-                      onClick={closeSolutionViewer}
-                      class="mt-2 text-xs text-zinc-500 hover:underline"
-                    >
-                      Close
-                    </button>
-                  </div>
-                </Show>
-                <Show when={viewingPlayer()}>
-                  <div class="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
-                    <p class="mb-2 text-xs font-medium text-zinc-600">
-                      {viewingPlayer()!.name}'s solution
-                    </p>
-                    <Show when={solutionLoading()}>
-                      <p class="text-xs text-zinc-500">Loading…</p>
-                    </Show>
-                    <Show when={!solutionLoading() && solutionData()}>
-                      {(sd) => (
-                        <>
-                          {sd().isNovel && (
-                            <span class="mb-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
-                              Novel
-                            </span>
-                          )}
-                          <SolutionGrid data={sd()} />
-                        </>
-                      )}
-                    </Show>
-                    <button
-                      type="button"
-                      onClick={closeSolutionViewer}
-                      class="mt-2 text-xs text-zinc-500 hover:underline"
-                    >
-                      Close
-                    </button>
-                  </div>
-                </Show>
-              </div>
-            </Show>
-            <Show when={justSolved() && newChain()}>
-              <div class="mt-8 w-full max-w-sm rounded-lg border border-emerald-200 bg-emerald-50/80 p-4">
-                <h2 class="mb-1 text-lg font-semibold text-green-700">
-                  You solved it!
-                </h2>
-                <p class="mb-3 text-sm text-zinc-600">
-                  Share this link with friends. They have 24 hours to play.
-                </p>
-                <div class="flex gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={
-                      typeof window !== "undefined"
-                        ? window.location.origin +
-                          window.location.pathname +
-                          "?g=" +
-                          encodeURIComponent(newChain()!)
-                        : ""
-                    }
-                    class="flex-1 truncate rounded border border-zinc-200 bg-white px-2 py-1.5 text-xs"
-                  />
-                  <CopyButton
-                    text={shareLinkCopyText()}
-                    class="shrink-0 rounded bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500"
-                  />
+                  <Show when={viewingPlayer()}>
+                    <div class="mt-4 rounded-xl border border-zinc-200 bg-zinc-50/90 p-3 text-left">
+                      <p class="mb-2 text-xs font-semibold text-zinc-700">
+                        {viewingPlayer()!.name}&apos;s solution
+                      </p>
+                      <Show when={solutionLoading()}>
+                        <p class="text-xs text-zinc-500">Loading…</p>
+                      </Show>
+                      <Show when={!solutionLoading() && solutionData()}>
+                        {(sd) => (
+                          <>
+                            {sd().isNovel && (
+                              <span class="mb-2 inline-block rounded-md bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
+                                Novel
+                              </span>
+                            )}
+                            <SolutionGrid data={sd()} />
+                          </>
+                        )}
+                      </Show>
+                      <button
+                        type="button"
+                        onClick={closeSolutionViewer}
+                        class="mt-2 text-xs font-medium text-zinc-500 hover:text-zinc-700 hover:underline"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </Show>
                 </div>
-                <Show when={submitError()}>
-                  <p class="mt-2 text-sm text-red-600">{submitError()}</p>
-                </Show>
-              </div>
+              </aside>
             </Show>
           </div>
         </main>

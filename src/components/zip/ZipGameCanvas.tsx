@@ -29,6 +29,40 @@ interface ZipGameCanvasProps {
   gradientSeed?: string;
 }
 
+/** Next waypoint value required when stepping onto a numbered cell (forward: 1..K). */
+function nextWaypointForward(path: number[], board: number[]): number {
+  let next = 1;
+  for (const idx of path) {
+    const v = board[idx];
+    if (v > 0) {
+      if (v !== next) return next;
+      next++;
+    }
+  }
+  return next;
+}
+
+/** Next waypoint value required when building from K toward 1 (reverse construction). */
+function nextWaypointReverse(
+  path: number[],
+  board: number[],
+  waypointCount: number,
+): number {
+  let need = waypointCount;
+  for (const idx of path) {
+    const v = board[idx];
+    if (v > 0) {
+      if (v !== need) return -1;
+      need--;
+    }
+  }
+  return need;
+}
+
+function toSubmitPath(path: number[], reverse: boolean): number[] {
+  return reverse ? [...path].reverse() : path;
+}
+
 export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
   const size = () => props.gridSize;
   const board = () => props.board;
@@ -36,30 +70,37 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
   const requiredPathLen = () => pathCellCount(size(), board());
 
   const [path, setPath] = createSignal<number[]>([]);
+  const [buildReverse, setBuildReverse] = createSignal(false);
   const [startTime] = createSignal(Date.now());
   const [elapsedMs, setElapsedMs] = createSignal(0);
   const [moves, setMoves] = createSignal(0);
   const [solved, setSolved] = createSignal(false);
+  const [completionAnimating, setCompletionAnimating] = createSignal(false);
+  const [pathDrawLength, setPathDrawLength] = createSignal<number | undefined>(
+    undefined,
+  );
 
   let canvasEl: HTMLCanvasElement | null = null;
   let timerId: ReturnType<typeof setInterval> | null = null;
+  let animFrame: number | null = null;
   const setCanvasRef = (el: HTMLCanvasElement) => {
     canvasEl = el;
   };
   const dragState = { lastProcessed: -1, active: false };
 
-  /** Next waypoint we need to pass (1..K). */
-  const nextWaypointExpected = (): number => {
-    const p = path();
-    let next = 1;
-    for (const idx of p) {
-      const v = board()[idx];
-      if (v > 0) {
-        if (v !== next) return next;
-        next++;
-      }
+  const nextWaypointForNewCell = (p: number[], index: number): boolean => {
+    const b = board();
+    const v = b[index];
+    const rev = buildReverse();
+    if (rev) {
+      const need = nextWaypointReverse(p, b, waypointCount());
+      if (need < 0) return false;
+      if (v > 0) return v === need && need > 0;
+      return true;
     }
-    return next;
+    const nextW = nextWaypointForward(p, b);
+    if (v > 0) return v === nextW;
+    return true;
   };
 
   const isAdjacent = (a: number, b: number) => {
@@ -73,63 +114,123 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
     );
   };
 
+  const runCompletionAnimation = (
+    fullPath: number[],
+    finishTime: number,
+    moveCount: number,
+  ) => {
+    setCompletionAnimating(true);
+    setPathDrawLength(1);
+    const n = fullPath.length;
+    const durationMs = Math.min(2200, 480 + n * 42);
+    const t0 = performance.now();
+
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - t0) / durationMs);
+      const eased = 1 - (1 - t) * (1 - t);
+      const len = Math.max(1, Math.ceil(eased * n));
+      setPathDrawLength(len);
+      if (t < 1) {
+        animFrame = requestAnimationFrame(tick);
+      } else {
+        animFrame = null;
+        setPathDrawLength(undefined);
+        setCompletionAnimating(false);
+        setSolved(true);
+        props.onSolve(finishTime, moveCount, fullPath);
+      }
+    };
+    animFrame = requestAnimationFrame(tick);
+  };
+
+  const inputLocked = () => solved() || completionAnimating();
+
   const applyCell = (index: number): boolean => {
-    if (solved()) return false;
+    if (inputLocked()) return false;
     const b = board();
     const v = b[index];
     if (v === BLOCKED) return false;
 
     const p = path();
-    const nextW = nextWaypointExpected();
+    const wc = waypointCount();
 
     if (p.length === 0) {
-      if (v !== 1) return false;
-      setPath([index]);
-      setMoves((m) => m + 1);
-      return true;
+      if (wc === 1) {
+        if (v !== 1) return false;
+        setBuildReverse(false);
+        setPath([index]);
+        setMoves(moves() + 1);
+        return true;
+      }
+      if (v === 1) {
+        setBuildReverse(false);
+        setPath([index]);
+        setMoves(moves() + 1);
+        return true;
+      }
+      if (v === wc) {
+        setBuildReverse(true);
+        setPath([index]);
+        setMoves(moves() + 1);
+        return true;
+      }
+      return false;
     }
 
     const last = p[p.length - 1];
     if (index === last) return false;
 
     if (index === p[p.length - 2]) {
-      setPath(p.slice(0, -1));
-      setMoves((m) => m + 1);
+      const nextP = p.slice(0, -1);
+      setPath(nextP);
+      setMoves(moves() + 1);
+      if (nextP.length === 0) setBuildReverse(false);
+      else if (nextP.length === 1) {
+        const c = b[nextP[0]];
+        setBuildReverse(c === wc && wc > 1);
+      }
       return true;
     }
 
-    // Click on a cell already in the path (but not last): truncate path to end there
     const pos = p.indexOf(index);
     if (pos >= 0 && pos < p.length - 1) {
-      setPath(p.slice(0, pos + 1));
-      setMoves((m) => m + 1);
+      const nextP = p.slice(0, pos + 1);
+      setPath(nextP);
+      setMoves(moves() + 1);
+      if (nextP.length === 1) {
+        const c = b[nextP[0]];
+        setBuildReverse(c === wc && wc > 1);
+      }
       return true;
     }
 
     if (!isAdjacent(last, index)) return false;
     if (p.includes(index)) return false;
-    if (v > 0 && v !== nextW) return false;
+    if (!nextWaypointForNewCell(p, index)) return false;
 
     const newPath = [...p, index];
+    const newMoveCount = moves() + 1;
     setPath(newPath);
-    setMoves((m) => m + 1);
+    setMoves(newMoveCount);
 
     if (newPath.length === requiredPathLen()) {
+      const submitPath = toSubmitPath(newPath, buildReverse());
       const res = validateZipSolution(
         size(),
         board(),
-        newPath,
+        submitPath,
         waypointCount(),
       );
       if (res.ok) {
         const finishTime = Date.now() - startTime();
-        setElapsedMs(finishTime);
         if (timerId != null) {
           clearInterval(timerId);
           timerId = null;
         }
-        setSolved(true);
-        props.onSolve(finishTime, moves() + 1, newPath);
+        setElapsedMs(finishTime);
+        setPath(submitPath);
+        setBuildReverse(false);
+        runCompletionAnimation(submitPath, finishTime, newMoveCount);
       }
     }
     return true;
@@ -166,9 +267,11 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
     if (!ctx) return;
     ctx.scale(dpr, dpr);
 
+    const pdl = pathDrawLength();
     paintZipBoard(ctx, s, b, p, theme, {
       highlightStartCell: true,
       gradientSeed: props.gradientSeed,
+      pathDrawLength: pdl ?? p.length,
     });
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   };
@@ -177,19 +280,23 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
     path();
     board();
     size();
+    pathDrawLength();
     paint();
   });
 
   onMount(() => {
     paint();
     timerId = setInterval(() => {
-      setElapsedMs(Date.now() - startTime());
+      if (!completionAnimating() && !solved()) {
+        setElapsedMs(Date.now() - startTime());
+      }
     }, 1000);
   });
 
   onCleanup(() => {
     dragState.active = false;
     if (timerId != null) clearInterval(timerId);
+    if (animFrame != null) cancelAnimationFrame(animFrame);
   });
 
   const formatTime = (ms: number) => {
@@ -213,7 +320,7 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
   };
 
   const handlePointerDown = (e: PointerEvent) => {
-    if (solved() || !canvasEl) return;
+    if (inputLocked() || !canvasEl) return;
     const { x: canvasX, y: canvasY } = clientToLogical(e.clientX, e.clientY);
     const idx = getCellFromPoint(canvasX, canvasY);
     if (idx == null) return;
@@ -225,7 +332,7 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
   };
 
   const handlePointerMove = (e: PointerEvent) => {
-    if (!dragState.active || !canvasEl) return;
+    if (!dragState.active || !canvasEl || inputLocked()) return;
     const { x: canvasX, y: canvasY } = clientToLogical(e.clientX, e.clientY);
     const idx = getCellFromPoint(canvasX, canvasY);
     if (idx == null) return;
@@ -233,8 +340,14 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
     if (board()[idx] === BLOCKED) return;
     const pathArr = path();
     if (pathArr.length > 0 && idx === pathArr[pathArr.length - 2]) {
-      setPath(pathArr.slice(0, -1));
-      setMoves((m) => m + 1);
+      const nextP = pathArr.slice(0, -1);
+      setPath(nextP);
+      setMoves(moves() + 1);
+      if (nextP.length === 0) setBuildReverse(false);
+      else if (nextP.length === 1) {
+        const c = board()[nextP[0]];
+        setBuildReverse(c === waypointCount() && waypointCount() > 1);
+      }
       dragState.lastProcessed = idx;
       return;
     }
@@ -246,30 +359,44 @@ export const ZipGameCanvas: Component<ZipGameCanvasProps> = (props) => {
     dragState.lastProcessed = -1;
   };
 
+  const hintEnd = () => (waypointCount() > 1 ? ` or ${waypointCount()}` : "");
+
   return (
     <div class="flex flex-col items-center gap-4">
       <div
-        class="flex items-center justify-between gap-4 rounded-lg border border-zinc-200 bg-zinc-100/80 px-3 py-2 text-sm"
+        class="flex items-center justify-between gap-4 rounded-xl border border-zinc-200/90 bg-white px-4 py-2.5 text-sm shadow-sm"
         style={{ width: `${logicalSize()}px` }}
       >
-        <span class="font-mono font-medium text-zinc-700 tabular-nums">
+        <span class="font-mono font-medium text-zinc-800 tabular-nums">
           {formatTime(elapsedMs())}
         </span>
         <span class="text-zinc-500">Moves: {moves()}</span>
       </div>
-      <canvas
-        ref={setCanvasRef}
-        class="touch-none select-none"
-        style={{ "touch-action": "none" }}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerLeave={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-      />
-      <p class="text-sm text-zinc-600">
-        Connect 1 → 2 → … → {waypointCount()} and fill all path cells. Tap or
-        drag.
+      <div
+        class="rounded-2xl p-1 shadow-md ring-1 ring-zinc-200/80"
+        style={{
+          background:
+            "linear-gradient(145deg, #ecfdf5 0%, #fff 45%, #f4f4f5 100%)",
+        }}
+      >
+        <canvas
+          ref={setCanvasRef}
+          class="touch-none rounded-xl select-none"
+          style={{ "touch-action": "none" }}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerLeave={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+        />
+      </div>
+      <p class="max-w-sm text-center text-sm leading-relaxed text-zinc-600">
+        Start at <span class="font-medium text-zinc-800">1</span>
+        {hintEnd()}
+        {waypointCount() > 1
+          ? ", then connect in order through every cell."
+          : " and fill all path cells."}{" "}
+        Tap or drag.
       </p>
     </div>
   );
